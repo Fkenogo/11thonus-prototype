@@ -28,7 +28,8 @@ import {
   Calendar
 } from 'lucide-react';
 import { LoyaltyCircle } from '../common/LoyaltyCircle';
-import { UserRole, ProgrammeStatus } from '../../types';
+import { UserRole, ProgrammeStatus, ParticipantRelationship } from '../../types';
+import { MobileNavigation } from './MobileNavigation';
 
 export const BusinessWorkspace: React.FC = () => {
   const {
@@ -49,6 +50,8 @@ export const BusinessWorkspace: React.FC = () => {
     approvePendingItem,
     rejectPendingItem,
     reverseTransaction,
+    recordQualifyingPurchase,
+    redeemReward,
     inviteStaffMember,
     toggleStaffStatus,
     topUpCommercialBalance,
@@ -131,6 +134,38 @@ export const BusinessWorkspace: React.FC = () => {
     const todayStr = new Date().toISOString().split('T')[0];
     return t.createdAt.startsWith(todayStr);
   });
+
+  // Customer search and filtering
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerFilterTab, setCustomerFilterTab] = useState<'all' | 'ready' | 'approaching'>('all');
+  const [approvalFilterTab, setApprovalFilterTab] = useState<'pending' | 'resolved'>('pending');
+
+  // Customer quick action modal state
+  const [actionCustomerRel, setActionCustomerRel] = useState<ParticipantRelationship | null>(null);
+  const [actionUnits, setActionUnits] = useState(1);
+  const [actionNotes, setActionNotes] = useState('');
+
+  const handleRecordActionSubmit = () => {
+    if (!actionCustomerRel) return;
+    if (actionCustomerRel.rewardAvailable) {
+      redeemReward({
+        programmeId: actionCustomerRel.programmeId,
+        customerId: actionCustomerRel.customerId
+      });
+      setActionCustomerRel(null);
+      return;
+    }
+
+    recordQualifyingPurchase({
+      programmeId: actionCustomerRel.programmeId,
+      customerId: actionCustomerRel.customerId,
+      quantity: actionUnits,
+      notes: actionNotes || 'Recorded via mobile management card'
+    });
+    setActionCustomerRel(null);
+    setActionUnits(1);
+    setActionNotes('');
+  };
 
   const handleCreateProgrammeSubmit = () => {
     createProgramme({
@@ -220,11 +255,11 @@ export const BusinessWorkspace: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24 md:pb-6">
       {/* Business Sub-Header Navigation */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-amber-600 text-white font-display font-black text-base flex items-center justify-center shadow-xs">
+          <div className="w-11 h-11 rounded-xl bg-amber-600 text-white font-display font-black text-base flex items-center justify-center shadow-xs shrink-0">
             {currentOrg.logoText}
           </div>
           <div>
@@ -242,8 +277,8 @@ export const BusinessWorkspace: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Navigation Pill Strip */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 lg:pb-0">
+        {/* Desktop Tab Navigation Pill Strip (Replaced by MobileNavigation on small devices) */}
+        <div className="hidden md:flex items-center gap-1 overflow-x-auto pb-1 lg:pb-0">
           {[
             { id: 'dashboard', label: 'Command Centre', icon: LayoutDashboard },
             { id: 'customers', label: 'Customers', icon: Users, badge: orgRelationships.length },
@@ -284,8 +319,342 @@ export const BusinessWorkspace: React.FC = () => {
       {/* ================= TAB 1: COMMAND CENTRE ================= */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
-          {/* Quick Actions Bar */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* ================= MOBILE-FIRST DASHBOARD STACK (md:hidden) ================= */}
+          <div className="md:hidden space-y-5">
+            {/* 1. HIGH-PRIORITY 'ATTENTION NEEDED' QUEUE */}
+            <section id="mobile-attention-queue" className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-900 flex items-center justify-center">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900 leading-tight">Attention Needed</h2>
+                    <p className="text-[11px] text-slate-500">Urgent approvals & reward-ready tasks</p>
+                  </div>
+                </div>
+                {(pendingApprovals.length > 0 || rewardsAvailableAtOrg.length > 0) && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                    {pendingApprovals.length + rewardsAvailableAtOrg.length} urgent
+                  </span>
+                )}
+              </div>
+
+              {/* Pending Approvals Stack */}
+              {pendingApprovals.length > 0 && (
+                <div className="space-y-3">
+                  {pendingApprovals.map(item => (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/60 shadow-xs space-y-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-full bg-amber-200 text-amber-950 font-bold text-xs flex items-center justify-center">
+                            {item.customerName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-bold text-sm text-slate-900 leading-snug">
+                              {item.customerName}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {item.programmeName}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-950 uppercase tracking-tight">
+                          Decision
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 bg-white/80 rounded-xl border border-amber-200/80 text-xs text-amber-950 space-y-1">
+                        <div className="flex items-center justify-between font-semibold">
+                          <span>Requested: {item.quantity} Units</span>
+                          <span className="text-slate-500 text-[11px]">By {item.staffName}</span>
+                        </div>
+                        <p className="text-[11px] text-amber-900 font-medium">
+                          {item.reason}
+                        </p>
+                      </div>
+
+                      {/* Primary Thumb Targets */}
+                      <div className="grid grid-cols-2 gap-2.5 pt-1">
+                        <button
+                          onClick={() => approvePendingItem(item.id)}
+                          className="h-12 rounded-xl bg-emerald-600 active:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition active:scale-[0.98]"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Approve</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedApprovalForReject(item.id);
+                            setRejectionReason('Exceeds single session limit');
+                          }}
+                          className="h-12 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Reject</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Rewards Ready to Redeem */}
+              {rewardsAvailableAtOrg.length > 0 && (
+                <div className="space-y-2.5">
+                  {rewardsAvailableAtOrg.map(rel => {
+                    const customer = users.find(u => u.id === rel.customerId);
+                    const prog = programmes.find(p => p.id === rel.programmeId);
+                    if (!customer || !prog) return null;
+
+                    return (
+                      <div
+                        key={rel.id}
+                        className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-amber-500/10 border border-emerald-300/80 shadow-xs flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                            <Gift className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{customer.name}</span>
+                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800">
+                                11th Ready
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {prog.name} • 10 visits completed!
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => setActionCustomerRel(rel)}
+                          className="px-3 py-2 rounded-xl bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs shrink-0 shadow-xs active:scale-[0.98] transition"
+                        >
+                          Redeem
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Customers Near 11th On Us (8 or 9 steps) */}
+              {customersCloseToReward.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs space-y-2">
+                  <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Approaching Reward ({customersCloseToReward.length})</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">8–9 of 10</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {customersCloseToReward.slice(0, 3).map(rel => {
+                      const customer = users.find(u => u.id === rel.customerId);
+                      if (!customer) return null;
+                      return (
+                        <div
+                          key={rel.id}
+                          className="flex items-center justify-between text-xs py-1 border-t border-slate-100 first:border-0"
+                        >
+                          <span className="font-medium text-slate-800">{customer.name}</span>
+                          <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                            {rel.approvedSteps}/10 visits
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* All Clear State */}
+              {pendingApprovals.length === 0 && rewardsAvailableAtOrg.length === 0 && (
+                <div className="p-4 rounded-2xl bg-white border border-slate-200 text-center space-y-1 shadow-xs">
+                  <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs font-bold text-slate-900">All Clear in Queue</div>
+                  <p className="text-[11px] text-slate-500">
+                    No pending multi-unit approvals or unresolved customer exceptions.
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {/* 2. 'TODAY'S ACTIVITY' SNIPPETS */}
+            <section id="mobile-today-activity" className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 leading-tight">Today's Activity</h2>
+                  <p className="text-[11px] text-slate-500">
+                    {todayTransactions.length > 0
+                      ? `${todayTransactions.length} customer visits recorded today`
+                      : 'Live transaction feed and counter velocity'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('reports')}
+                  className="text-[11px] font-bold text-amber-700 hover:text-amber-800 flex items-center gap-0.5"
+                >
+                  <span>Reports</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {(todayTransactions.length > 0 ? todayTransactions : orgTransactions).slice(0, 5).map(tx => {
+                  const customer = users.find(u => u.id === tx.customerId);
+                  const prog = programmes.find(p => p.id === tx.programmeId);
+                  const isRedemption = tx.type === 'reward_redemption';
+
+                  return (
+                    <div
+                      key={tx.id}
+                      className={`p-3 rounded-2xl border shadow-xs flex items-center justify-between gap-3 text-xs ${
+                        isRedemption
+                          ? 'bg-amber-50/70 border-amber-200'
+                          : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isRedemption
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {isRedemption ? <Gift className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>{customer?.name || 'Customer'}</span>
+                            <span className="text-[10px] text-slate-400 font-normal">
+                              {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {prog?.name || 'Service'} • {isRedemption ? '11th ONUS Reward' : `${tx.quantity} visit`}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          {tx.staffName.split(' ')[0]}
+                        </span>
+                        <button
+                          onClick={() => reverseTransaction(tx.id, 'Cashier correction on mobile')}
+                          title="Reverse entry if error"
+                          className="p-1 rounded-lg text-slate-300 hover:text-slate-600 active:text-red-600"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* 3. 'QUICK ACTIONS' AS LARGE-TOUCH BUTTONS */}
+            <section id="mobile-quick-actions" className="space-y-3 pt-1">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 leading-tight">Quick Actions</h2>
+                <p className="text-[11px] text-slate-500">Primary operational tools sized for mobile thumbs</p>
+              </div>
+
+              <div className="space-y-2.5">
+                {/* 1. Record Customer Visit */}
+                <button
+                  onClick={() => switchRole('frontline_staff')}
+                  className="w-full min-h-[54px] p-4 rounded-2xl bg-amber-600 active:bg-amber-700 text-white font-bold text-sm flex items-center justify-between shadow-sm active:scale-[0.98] transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                      <RotateCcw className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold leading-tight">Record Customer Visit</div>
+                      <div className="text-[11px] text-amber-100 font-normal">Open frontline counter terminal</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-amber-200" />
+                </button>
+
+                {/* 2. Create Loyalty Programme */}
+                <button
+                  onClick={() => {
+                    setWizardStep(1);
+                    setActiveTab('new_programme_wizard');
+                  }}
+                  className="w-full min-h-[54px] p-4 rounded-2xl bg-slate-900 active:bg-slate-800 text-white font-bold text-sm flex items-center justify-between shadow-sm active:scale-[0.98] transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
+                      <Award className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold leading-tight">Create Loyalty Programme</div>
+                      <div className="text-[11px] text-slate-400 font-normal">Guided 10+1 wizard setup</div>
+                    </div>
+                  </div>
+                  <Plus className="w-5 h-5 text-slate-300" />
+                </button>
+
+                {/* 3. Invite Staff Member */}
+                <button
+                  onClick={() => setShowInviteModal(true)}
+                  className="w-full min-h-[54px] p-4 rounded-2xl bg-white border-2 border-slate-200 active:border-slate-300 text-slate-800 font-bold text-sm flex items-center justify-between shadow-xs active:scale-[0.98] transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center">
+                      <UserPlus className="w-5 h-5 text-slate-700" />
+                    </div>
+                    <div className="text-left">
+                      <div className="font-bold leading-tight">Invite Team Member</div>
+                      <div className="text-[11px] text-slate-500 font-normal">Add cashiers, managers, or stylists</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-slate-400" />
+                </button>
+
+                {/* 4. Setup Guide / Location (Owner only) */}
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setOnboardStep(1);
+                      setActiveTab('onboarding_wizard');
+                    }}
+                    className="w-full min-h-[54px] p-4 rounded-2xl bg-white border-2 border-amber-200 active:border-amber-300 text-amber-950 font-bold text-sm flex items-center justify-between shadow-xs active:scale-[0.98] transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-amber-700" />
+                      </div>
+                      <div className="text-left">
+                        <div className="font-bold leading-tight">Business Setup Guide</div>
+                        <div className="text-[11px] text-amber-800 font-normal">Onboarding, locations & store config</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-amber-600" />
+                  </button>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* ================= MULTI-COLUMN DESKTOP DASHBOARD (hidden md:block) ================= */}
+          <div className="hidden md:block space-y-6">
+            {/* Quick Actions Bar */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-slate-700">
               <Sparkles className="w-4 h-4 text-amber-600" />
               <span className="font-semibold">Quick Actions:</span>
@@ -688,82 +1057,224 @@ export const BusinessWorkspace: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* ================= TAB 2: CUSTOMERS ================= */}
       {activeTab === 'customers' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Customer Relationships ({orgRelationships.length})
-              </h2>
-              <p className="text-xs text-slate-500">
-                Customers participating in {currentOrg.name} loyalty programmes. Activity at other businesses is isolated.
-              </p>
+        <div className="space-y-4 sm:space-y-5">
+          {/* Customers Header & Controls */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Customer Relationships ({orgRelationships.length})
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Customers registered with {currentOrg.name}. Isolated to this business.
+                </p>
+              </div>
+              <button
+                onClick={() => switchRole('frontline_staff')}
+                className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-bold text-xs flex items-center gap-1.5 hover:bg-amber-100 transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                <span>Open Counter Terminal</span>
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={customerSearchQuery}
+                onChange={e => setCustomerSearchQuery(e.target.value)}
+                placeholder="Search customers by name, phone or ONUS ID..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-amber-500 focus:outline-hidden transition"
+              />
+              {customerSearchQuery && (
+                <button
+                  onClick={() => setCustomerSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+              {[
+                { id: 'all', label: 'All Customers', count: orgRelationships.length },
+                { id: 'ready', label: '11th Ready', count: rewardsAvailableAtOrg.length, highlight: true },
+                { id: 'approaching', label: 'Near Reward (8-9)', count: customersCloseToReward.length }
+              ].map(f => {
+                const isSelected = customerFilterTab === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setCustomerFilterTab(f.id as any)}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap transition flex items-center gap-1.5 ${
+                      isSelected
+                        ? f.highlight
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <span>{f.label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
+                      }`}
+                    >
+                      {f.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div className="divide-y divide-slate-100">
-            {orgRelationships.map(rel => {
+          {/* Customer Profile Cards Grid */}
+          {(() => {
+            const filteredRels = orgRelationships.filter(rel => {
               const customer = users.find(u => u.id === rel.customerId);
               const prog = programmes.find(p => p.id === rel.programmeId);
-              if (!customer || !prog) return null;
+              if (!customer || !prog) return false;
 
+              // Filter tab
+              if (customerFilterTab === 'ready' && !rel.rewardAvailable) return false;
+              if (customerFilterTab === 'approaching' && (rel.approvedSteps < 8 || rel.rewardAvailable)) return false;
+
+              // Search query
+              if (customerSearchQuery.trim()) {
+                const q = customerSearchQuery.toLowerCase();
+                const matchName = customer.name.toLowerCase().includes(q);
+                const matchPhone = customer.phone.toLowerCase().includes(q);
+                const matchOnus = customer.onusId ? customer.onusId.toLowerCase().includes(q) : false;
+                const matchProg = prog.name.toLowerCase().includes(q);
+                return matchName || matchPhone || matchOnus || matchProg;
+              }
+              return true;
+            });
+
+            if (filteredRels.length === 0) {
               return (
-                <div key={rel.id} className="py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-sm">
-                      {customer.initials}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-slate-900">{customer.name}</span>
-                        <span className="text-[11px] text-slate-500 font-mono">{customer.onusId}</span>
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Programme: <strong className="text-slate-700">{prog.name}</strong> • Phone: {customer.phone}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        Cycle #{rel.currentCycle} • Joined: {new Date(rel.joinedAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    {/* Visual miniature circle */}
-                    <div className="scale-75 origin-right">
-                      <LoyaltyCircle
-                        approvedSteps={rel.approvedSteps}
-                        pendingSteps={rel.pendingSteps}
-                        rewardAvailable={rel.rewardAvailable}
-                        size="sm"
-                        showLabels={false}
-                        cycleNumber={rel.currentCycle}
-                      />
-                    </div>
-
-                    <div className="text-right min-w-[120px]">
-                      {rel.rewardAvailable ? (
-                        <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                          11th On Us Ready
-                        </span>
-                      ) : (
-                        <div>
-                          <span className="text-sm font-extrabold text-slate-900">
-                            {rel.approvedSteps} of 10
-                          </span>
-                          <span className="text-xs text-slate-400 block">
-                            {10 - rel.approvedSteps} steps to go
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 space-y-2 shadow-xs">
+                  <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                  <div className="text-sm font-bold text-slate-800">No matching customers</div>
+                  <p className="text-xs text-slate-400">
+                    Try adjusting your search query or filter selection.
+                  </p>
                 </div>
               );
-            })}
-          </div>
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+                {filteredRels.map(rel => {
+                  const customer = users.find(u => u.id === rel.customerId);
+                  const prog = programmes.find(p => p.id === rel.programmeId);
+                  if (!customer || !prog) return null;
+
+                  return (
+                    <div
+                      key={rel.id}
+                      className={`p-4 sm:p-5 rounded-2xl border transition shadow-xs space-y-3.5 ${
+                        rel.rewardAvailable
+                          ? 'bg-gradient-to-b from-amber-50/70 to-white border-amber-300 ring-1 ring-amber-300/40'
+                          : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      {/* Card Header: Profile Info */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-900 font-display font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                            {customer.initials}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-bold text-sm text-slate-900 truncate">
+                                {customer.name}
+                              </h3>
+                              <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                                {customer.onusId}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate">
+                              {customer.phone}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        {rel.rewardAvailable ? (
+                          <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-950 border border-amber-300 shrink-0 animate-pulse">
+                            🎁 11th Ready!
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 shrink-0">
+                            Cycle #{rel.currentCycle}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Programme Context & Visual Progress */}
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+                            Active Programme
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 block">
+                            {prog.name}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {rel.rewardAvailable
+                              ? '10 visits recorded • 11th On Us!'
+                              : `${rel.approvedSteps} of 10 steps • ${10 - rel.approvedSteps} to go`}
+                          </span>
+                        </div>
+
+                        <div className="shrink-0 scale-85 origin-right">
+                          <LoyaltyCircle
+                            approvedSteps={rel.approvedSteps}
+                            pendingSteps={rel.pendingSteps}
+                            rewardAvailable={rel.rewardAvailable}
+                            size="sm"
+                            showLabels={false}
+                            cycleNumber={rel.currentCycle}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Primary 'Record Action' Touch Target */}
+                      <div className="pt-0.5">
+                        {rel.rewardAvailable ? (
+                          <button
+                            onClick={() => setActionCustomerRel(rel)}
+                            className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition active:scale-[0.98]"
+                          >
+                            <Gift className="w-4 h-4" />
+                            <span>Redeem 11th ONUS Reward</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setActionCustomerRel(rel)}
+                            className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-black text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition active:scale-[0.98]"
+                          >
+                            <Plus className="w-4 h-4 text-amber-400" />
+                            <span>Record Customer Visit</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -833,25 +1344,28 @@ export const BusinessWorkspace: React.FC = () => {
                 </div>
 
                 {/* Status controls */}
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-slate-500">
+                <div className="flex items-center justify-between gap-3 text-xs pt-1">
+                  <span className="hidden sm:inline text-slate-500 text-[11px]">
                     Max units: {prog.rules.maxUnitsPerTx} • Approval threshold: {prog.rules.requireApprovalAbove}+
+                  </span>
+                  <span className="sm:hidden text-slate-400 text-[11px] font-medium">
+                    10+1 Standard
                   </span>
 
                   <div className="flex items-center gap-2">
                     {prog.status === 'active' ? (
                       <button
                         onClick={() => updateProgrammeStatus(prog.id, 'paused')}
-                        className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold text-xs transition active:scale-[0.98]"
                       >
-                        Pause
+                        Pause Programme
                       </button>
                     ) : prog.status === 'paused' || prog.status === 'draft' ? (
                       <button
                         onClick={() => updateProgrammeStatus(prog.id, 'active')}
-                        className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                        className="min-h-[40px] px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs transition active:scale-[0.98] shadow-xs"
                       >
-                        Activate
+                        Activate Programme
                       </button>
                     ) : null}
                   </div>
@@ -864,75 +1378,220 @@ export const BusinessWorkspace: React.FC = () => {
 
       {/* ================= TAB 4: APPROVAL CENTRE (Section 18, 19) ================= */}
       {activeTab === 'approvals' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                Operations Approval Centre
-              </h2>
-              <p className="text-xs text-slate-500">
-                Manage transaction exceptions, multi-unit visits, and audit records.
-              </p>
+        <div className="space-y-4 sm:space-y-5">
+          {/* Approvals Header & Filter Toggle */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Operations Approval Queue
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Multi-unit visits, exceptions, and audit decisions for {currentOrg.name}.
+                </p>
+              </div>
+
+              {/* Status Toggle Pills */}
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                <button
+                  onClick={() => setApprovalFilterTab('pending')}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition ${
+                    approvalFilterTab === 'pending'
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <span>Pending</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                      approvalFilterTab === 'pending' ? 'bg-white text-amber-900' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {pendingApprovals.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setApprovalFilterTab('resolved')}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition ${
+                    approvalFilterTab === 'resolved'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <span>Resolved Log</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                      approvalFilterTab === 'resolved' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {orgApprovals.filter(a => a.status !== 'pending').length}
+                  </span>
+                </button>
+              </div>
             </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
-              {pendingApprovals.length} pending
-            </span>
           </div>
 
-          {pendingApprovals.length === 0 ? (
-            <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-100 text-slate-500 space-y-2">
-              <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-              <div className="text-sm font-bold text-slate-900">You're all caught up!</div>
-              <p className="text-xs">No transactions currently waiting for manager or owner approval.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingApprovals.map(item => (
-                <div
-                  key={item.id}
-                  className="p-4 rounded-xl border border-amber-200 bg-amber-50/50 space-y-3"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-200 text-amber-900">
-                          Requires Approval
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {new Date(item.requestedAt).toLocaleString()}
+          {/* Pending Approvals: Mobile-Native Card-Stack Layout */}
+          {approvalFilterTab === 'pending' && (
+            <>
+              {pendingApprovals.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 space-y-2 shadow-xs">
+                  <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div className="text-sm font-bold text-slate-900">All Approvals Resolved</div>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    No transactions currently waiting for manager or owner sign-off.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {pendingApprovals.map(item => (
+                    <div
+                      key={item.id}
+                      className="p-4 sm:p-5 rounded-2xl border-2 border-amber-300/80 bg-white shadow-xs space-y-4"
+                    >
+                      {/* Customer & Programme Header */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-950 font-display font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                            {item.customerName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
+                                {item.customerName}
+                              </h3>
+                              <span className="font-mono text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                                {item.customerId}
+                              </span>
+                            </div>
+                            <div className="text-xs text-amber-900 font-semibold mt-0.5">
+                              {item.programmeName}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide bg-amber-100 text-amber-950 border border-amber-300 shrink-0">
+                          Requires Decision
                         </span>
                       </div>
-                      <h3 className="text-sm font-bold text-slate-900 mt-1">
-                        {item.customerName} • {item.programmeName}
-                      </h3>
-                      <p className="text-xs text-amber-900 mt-0.5 font-medium">
-                        {item.reason}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        Recorded by staff: <strong>{item.staffName}</strong> • Requested units: <strong>{item.quantity}</strong>
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => approvePendingItem(item.id)}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition"
-                      >
-                        Approve & Apply
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedApprovalForReject(item.id);
-                          setRejectionReason('Declined multi-unit request');
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition"
-                      >
-                        Reject with Reason
-                      </button>
+                      {/* Transaction Highlight Details */}
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                            Requested Units
+                          </span>
+                          <span className="font-extrabold text-slate-900 text-sm">
+                            {item.quantity} {item.quantity === 1 ? 'Unit' : 'Units'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                            Staff Member
+                          </span>
+                          <span className="font-bold text-slate-800 truncate block">
+                            {item.staffName}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Explicit Reason Callout */}
+                      <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 text-xs text-amber-950 flex items-start gap-2.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="font-bold text-[11px] uppercase tracking-wider text-amber-800">
+                            Reason for Review
+                          </div>
+                          <p className="font-medium mt-0.5 leading-snug">
+                            {item.reason}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Primary Easy-to-Reach Thumb Targets */}
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <button
+                          onClick={() => approvePendingItem(item.id)}
+                          className="min-h-[48px] rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition active:scale-[0.98]"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Approve & Apply</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedApprovalForReject(item.id);
+                            setRejectionReason('Declined multi-unit visit limit');
+                          }}
+                          className="min-h-[48px] rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition active:scale-[0.98]"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Reject Entry</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
+            </>
+          )}
+
+          {/* Resolved Log */}
+          {approvalFilterTab === 'resolved' && (
+            <div className="space-y-3">
+              {orgApprovals.filter(a => a.status !== 'pending').length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-500 space-y-2 shadow-xs">
+                  <Clock className="w-8 h-8 text-slate-300 mx-auto" />
+                  <div className="text-sm font-bold text-slate-800">No resolved items yet</div>
+                  <p className="text-xs text-slate-400">Decisions you make will appear here for auditing.</p>
+                </div>
+              ) : (
+                orgApprovals
+                  .filter(a => a.status !== 'pending')
+                  .map(item => (
+                    <div
+                      key={item.id}
+                      className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                            item.status === 'approved'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {item.status === 'approved' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900">
+                            {item.customerName} • {item.quantity} Units
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {item.programmeName} • Staff: {item.staffName}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            item.status === 'approved'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          {new Date(item.requestedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+              )}
             </div>
           )}
         </div>
@@ -1919,6 +2578,150 @@ export const BusinessWorkspace: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ================= MODAL: RECORD CUSTOMER VISIT / REDEEM REWARD ================= */}
+      {actionCustomerRel && (() => {
+        const customer = users.find(u => u.id === actionCustomerRel.customerId);
+        const prog = programmes.find(p => p.id === actionCustomerRel.programmeId);
+        if (!customer || !prog) return null;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-xs ${
+                    actionCustomerRel.rewardAvailable ? 'bg-emerald-600' : 'bg-slate-900'
+                  }`}>
+                    {actionCustomerRel.rewardAvailable ? <Gift className="w-5 h-5" /> : <Check className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {actionCustomerRel.rewardAvailable ? 'Redeem 11th ONUS Reward' : 'Record Customer Visit'}
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      {customer.name} ({customer.onusId})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActionCustomerRel(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Details card */}
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-2 text-xs">
+                <div className="flex items-center justify-between font-medium">
+                  <span className="text-slate-500">Programme:</span>
+                  <span className="font-bold text-slate-900">{prog.name}</span>
+                </div>
+                <div className="flex items-center justify-between font-medium">
+                  <span className="text-slate-500">Current Progress:</span>
+                  <span className="font-bold text-amber-700">
+                    {actionCustomerRel.rewardAvailable
+                      ? 'Reward Unlocked (10/10 Visits)'
+                      : `${actionCustomerRel.approvedSteps} of 10 Steps`}
+                  </span>
+                </div>
+              </div>
+
+              {actionCustomerRel.rewardAvailable ? (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <span>11th Visit is 100% On Us</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800">
+                    Confirm that the customer is receiving their free reward now. Their loyalty circle will reset to Cycle #{actionCustomerRel.currentCycle + 1}.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Units to Record
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {[1, 2, 3].map(u => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setActionUnits(u)}
+                          className={`flex-1 py-2.5 rounded-xl text-xs font-bold border transition ${
+                            actionUnits === u
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {u} {u === 1 ? 'Visit' : 'Visits'}
+                        </button>
+                      ))}
+                    </div>
+                    {actionUnits > 1 && (
+                      <p className="text-[11px] text-amber-700 mt-1">
+                        Note: Visits exceeding threshold require manager approval.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Transaction Note (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={actionNotes}
+                      onChange={e => setActionNotes(e.target.value)}
+                      placeholder="e.g. Counter visit, haircut, order..."
+                      className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="pt-2 flex gap-2.5">
+                <button
+                  onClick={() => setActionCustomerRel(null)}
+                  className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 text-xs font-semibold hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRecordActionSubmit}
+                  className={`flex-1 py-3 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-[0.98] ${
+                    actionCustomerRel.rewardAvailable
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  {actionCustomerRel.rewardAvailable ? 'Confirm Redemption' : 'Record Qualifying Visit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ================= MOBILE BOTTOM NAVIGATION ================= */}
+      <MobileNavigation
+        activeTab={activeTab}
+        onSelectTab={(tabId) => setActiveTab(tabId as any)}
+        badges={{
+          approvals: pendingApprovals.length,
+          customers: orgRelationships.length,
+          programmes: orgProgrammes.length
+        }}
+        isOwner={isOwner}
+        onQuickCounter={() => switchRole('frontline_staff')}
+        onOpenSetup={() => {
+          setOnboardStep(1);
+          setActiveTab('onboarding_wizard');
+        }}
+      />
     </div>
   );
 };

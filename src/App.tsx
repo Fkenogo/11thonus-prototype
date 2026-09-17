@@ -23,7 +23,7 @@ function AppContent() {
 
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
 
-  const isMobileRole = activeRole === 'participant' || activeRole === 'frontline_staff';
+  const isMobileRole = activeRole === 'participant' || activeRole === 'frontline_staff' || activeRole === 'business_owner' || activeRole === 'business_manager';
   const shouldWrapInPhone = isMobileRole && deviceView === 'mobile_frame';
 
   return (
@@ -36,7 +36,7 @@ function AppContent() {
         {shouldWrapInPhone ? (
           /* Realistic Mobile Phone Frame Container */
           <div className="flex flex-col items-center justify-center py-4">
-            <div className="w-full max-w-[400px] bg-slate-900 p-3 rounded-[40px] shadow-2xl border-4 border-slate-800">
+            <div className="w-full max-w-[420px] bg-slate-900 p-3 rounded-[40px] shadow-2xl border-4 border-slate-800">
               {/* Phone Speaker & Notch */}
               <div className="w-28 h-4 bg-slate-800 rounded-full mx-auto mb-2 flex items-center justify-center">
                 <div className="w-3 h-3 rounded-full bg-slate-950/80 mr-2" />
@@ -44,11 +44,15 @@ function AppContent() {
               </div>
 
               {/* Phone Display Screen */}
-              <div className="bg-[#f8f9fa] rounded-[32px] overflow-y-auto max-h-[740px] p-3 shadow-inner">
-                {activeRole === 'participant' ? (
+              <div className="bg-[#f8f9fa] rounded-[32px] overflow-y-auto max-h-[740px] p-2.5 sm:p-3 shadow-inner">
+                {activeRole === 'participant' && (
                   <ParticipantExperience />
-                ) : (
+                )}
+                {activeRole === 'frontline_staff' && (
                   <StaffCounterExperience />
+                )}
+                {(activeRole === 'business_owner' || activeRole === 'business_manager') && (
+                  <BusinessWorkspace />
                 )}
               </div>
 
