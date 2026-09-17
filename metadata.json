@@ -1,0 +1,6 @@
+{
+  "name": "11thONUS Experience Architecture",
+  "description": "High-fidelity interactive prototype of the 11thONUS loyalty ecosystem: Business Workspace, Participant Mobile, and Platform Operations Console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
