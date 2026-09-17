@@ -95,6 +95,8 @@ interface AppContextType {
   inviteStaffMember: (staffData: { name: string; email: string; phone: string; role: UserRole; title: string }) => void;
   toggleStaffStatus: (userId: string) => void;
   topUpCommercialBalance: (orgId: string, amountUSD: number) => void;
+  registerWalkInCustomer: (params: { name: string; phone: string; programmeId: string }) => string;
+  joinProgrammeAsParticipant: (programmeId: string) => void;
 
   // Operator actions
   resolveIntegrityCase: (caseId: string, notes: string) => void;
@@ -886,6 +888,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const registerWalkInCustomer = ({ name, phone, programmeId }: { name: string; phone: string; programmeId: string }): string => {
+    const custId = `user-walkin-${Date.now().toString().slice(-4)}`;
+    const initials = name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'CU';
+    const onusId = `ONUS-${Math.floor(1000 + Math.random() * 9000)}-${initials}`;
+
+    const newCustomer: User = {
+      id: custId,
+      name,
+      phone,
+      email: `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}@participant.11thonus.com`,
+      role: 'participant',
+      initials,
+      onusId,
+      active: true
+    };
+
+    setUsers(prev => [...prev, newCustomer]);
+
+    // Create participant relationship
+    const newRel: ParticipantRelationship = {
+      id: `rel-${custId}-${programmeId}`,
+      customerId: custId,
+      programmeId,
+      orgId: currentOrg.id,
+      approvedSteps: 0,
+      pendingSteps: 0,
+      rewardAvailable: false,
+      currentCycle: 1,
+      totalCompletedCycles: 0,
+      totalRedeemedRewards: 0,
+      joinedAt: new Date().toISOString().split('T')[0],
+      lastActivityAt: new Date().toISOString()
+    };
+
+    setRelationships(prev => [...prev, newRel]);
+
+    showToast({
+      title: 'Customer registered',
+      description: `${name} registered. ID: ${onusId}. Starting Cycle #1 (0/10).`,
+      type: 'success'
+    });
+
+    return custId;
+  };
+
+  const joinProgrammeAsParticipant = (programmeId: string) => {
+    const prog = programmes.find(p => p.id === programmeId);
+    if (!prog) return;
+
+    const existing = relationships.find(
+      r => r.customerId === currentUser.id && r.programmeId === programmeId
+    );
+    if (existing) {
+      showToast({
+        title: 'Already a member',
+        description: `You are already enrolled in ${prog.name}.`,
+        type: 'info'
+      });
+      return;
+    }
+
+    const newRel: ParticipantRelationship = {
+      id: `rel-${currentUser.id}-${programmeId}`,
+      customerId: currentUser.id,
+      programmeId,
+      orgId: prog.orgId,
+      approvedSteps: 0,
+      pendingSteps: 0,
+      rewardAvailable: false,
+      currentCycle: 1,
+      totalCompletedCycles: 0,
+      totalRedeemedRewards: 0,
+      joinedAt: new Date().toISOString().split('T')[0],
+      lastActivityAt: new Date().toISOString()
+    };
+
+    setRelationships(prev => [...prev, newRel]);
+    showToast({
+      title: 'Enrolled in Loyalty Circle',
+      description: `Welcome! Complete 10 qualifying visits to earn your 11th on ${organisations.find(o => o.id === prog.orgId)?.name}.`,
+      type: 'success'
+    });
+  };
+
   // 7. OPERATOR ACTIONS
   const resolveIntegrityCase = (caseId: string, notes: string) => {
     setIntegrityCases(prev => prev.map(c => {
@@ -1054,6 +1145,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         inviteStaffMember,
         toggleStaffStatus,
         topUpCommercialBalance,
+        registerWalkInCustomer,
+        joinProgrammeAsParticipant,
         resolveIntegrityCase,
         resolveSupportCase,
         toggleOrgStatus,

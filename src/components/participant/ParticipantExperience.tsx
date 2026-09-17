@@ -25,7 +25,8 @@ export const ParticipantExperience: React.FC = () => {
     programmes,
     relationships,
     transactions,
-    completedRewards
+    completedRewards,
+    joinProgrammeAsParticipant
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'home' | 'programmes' | 'activity' | 'profile'>('home');
@@ -93,54 +94,52 @@ export const ParticipantExperience: React.FC = () => {
       {/* Main Tab Views */}
       {activeTab === 'home' && (
         <div className="space-y-4">
-          {/* PRIORITY 1: REWARD AVAILABLE BANNER (Section 31 & 37) */}
+          {/* PRIORITY 1: REWARD AVAILABLE BANNER - EMOTIONAL PAYOFF (Section 8) */}
           {rewardAvailableRel && (
             <div className="bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 text-white rounded-2xl p-5 shadow-lg shadow-amber-500/20 space-y-3 relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full text-amber-100">
-                  <Sparkles className="w-3 h-3 text-amber-200 animate-spin" />
-                  Your 11th is On Us!
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full text-amber-100">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                  Circle Completed!
                 </span>
-                <span className="text-xs font-mono font-bold bg-black/20 px-2 py-0.5 rounded">
+                <span className="text-xs font-mono font-bold bg-black/20 px-2.5 py-0.5 rounded">
                   {rewardAvailableRel.rewardCode || 'ONUS-FREE'}
                 </span>
               </div>
 
               <div>
-                <h2 className="text-lg font-bold font-display">
-                  {programmes.find(p => p.id === rewardAvailableRel.programmeId)?.rewardDescription || 'Free Reward Available'}
+                <h2 className="text-lg font-bold font-display leading-tight">
+                  Your 11th {programmes.find(p => p.id === rewardAvailableRel.programmeId)?.qualifyingItemName || 'Visit'} is on {organisations.find(o => o.id === rewardAvailableRel.orgId)?.name}!
                 </h2>
-                <p className="text-xs text-amber-100 mt-0.5">
-                  At {organisations.find(o => o.id === rewardAvailableRel.orgId)?.name}. Show your code at the counter to redeem.
+                <p className="text-xs text-amber-100 mt-1">
+                  You completed 10 qualifying visits. Present your code at the counter to redeem your reward.
                 </p>
               </div>
 
-              <div className="pt-1 flex items-center justify-between">
+              <div className="pt-2 flex items-center justify-between">
                 <button
                   onClick={() => setShowQrModal(true)}
                   className="px-4 py-2 rounded-xl bg-white text-amber-950 font-bold text-xs shadow-sm hover:bg-slate-50 transition active:scale-98 flex items-center gap-1.5"
                 >
                   <Gift className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Redeem In Store</span>
+                  <span>Show Code to Redeem</span>
                 </button>
-                <span className="text-[11px] text-amber-200">
-                  Circle Completed ✓
+                <span className="text-[11px] font-semibold text-amber-200">
+                  Cycle #{rewardAvailableRel.currentCycle} Complete ✓
                 </span>
               </div>
             </div>
           )}
 
-          {/* PRIORITY 2: CLOSEST TO REWARD SHOWCASE (Section 31) */}
-          {closestToRewardRel && (
+          {/* PRIORITY 2: CLOSEST TO REWARD SHOWCASE */}
+          {closestToRewardRel ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Closest to Reward
-                  </span>
-                </div>
-                <span className="text-xs font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                  {10 - closestToRewardRel.approvedSteps} visits left
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Closest Reward
+                </span>
+                <span className="text-xs font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                  {10 - closestToRewardRel.approvedSteps} visits remaining
                 </span>
               </div>
 
@@ -173,24 +172,43 @@ export const ParticipantExperience: React.FC = () => {
                   }}
                   className="text-xs font-semibold text-amber-700 hover:underline"
                 >
-                  Details →
+                  View Details →
                 </button>
               </div>
             </div>
-          )}
+          ) : !rewardAvailableRel ? (
+            /* Helpful empty state when participant has no active circles */
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-6 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                <Gift className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Start Your First Loyalty Circle</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                  Show your 11thONUS code at participating businesses to start counting 10 visits towards your 11th on the house.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowJoinModal(true)}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition"
+              >
+                Find Businesses
+              </button>
+            </div>
+          ) : null}
 
-          {/* PRIORITY 3: MY BUSINESSES / PROGRAMMES (Section 39) */}
+          {/* PRIORITY 3: MY LOYALTY (Section 7 - Natural language) */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                My Independent Programmes ({myRelationships.length})
+                My Loyalty ({myRelationships.length})
               </h2>
               <button
                 onClick={() => setShowJoinModal(true)}
                 className="text-xs font-semibold text-amber-700 flex items-center gap-1 hover:underline"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Join New</span>
+                <span>Join Another</span>
               </button>
             </div>
 
@@ -222,7 +240,7 @@ export const ParticipantExperience: React.FC = () => {
                     <div className="flex items-center gap-2">
                       {rel.rewardAvailable ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                          11th On Us Ready
+                          11th Ready
                         </span>
                       ) : (
                         <span className="text-xs font-bold text-slate-800">
@@ -511,39 +529,97 @@ export const ParticipantExperience: React.FC = () => {
 
       {/* ================= MODAL: JOIN NEW PROGRAMME ================= */}
       {showJoinModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-200 space-y-4 text-xs">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Join a Business Programme</h3>
+              <div className="flex items-center gap-2">
+                <Store className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-bold text-slate-900">Join a Loyalty Circle</h3>
+              </div>
               <button onClick={() => setShowJoinModal(false)}>
-                <X className="w-4 h-4 text-slate-400" />
+                <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
               </button>
             </div>
 
             <p className="text-slate-600">
-              Ask your favourite business for their 11thONUS code, or present your personal code at their counter to be connected automatically.
+              Join a participating business to begin counting 10 qualifying purchases towards your 11th on us.
             </p>
 
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Enter Business or Invite Code</label>
-              <input
-                type="text"
-                placeholder="e.g. BELLA-VIP or JOES-COFFEE"
-                value={joinCode}
-                onChange={e => setJoinCode(e.target.value)}
-                className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-mono uppercase"
-              />
+            {/* Quick Browse Available Active Programmes */}
+            <div className="space-y-1.5">
+              <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">
+                Available Businesses:
+              </span>
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {programmes
+                  .filter(p => p.status === 'active')
+                  .map(prog => {
+                    const org = organisations.find(o => o.id === prog.orgId);
+                    const alreadyJoined = myRelationships.some(r => r.programmeId === prog.id);
+                    return (
+                      <div
+                        key={prog.id}
+                        className="p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between gap-2"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-900 leading-tight">
+                            {org?.name}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {prog.name}
+                          </div>
+                        </div>
+                        {alreadyJoined ? (
+                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            Enrolled ✓
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              joinProgrammeAsParticipant(prog.id);
+                              setShowJoinModal(false);
+                            }}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] transition shadow-2xs"
+                          >
+                            Join Circle
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
 
-            <button
-              onClick={() => {
-                setShowJoinModal(false);
-                setJoinCode('');
-              }}
-              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition"
-            >
-              Connect Programme
-            </button>
+            <div className="pt-2 border-t border-slate-100">
+              <label className="font-bold text-slate-700 block mb-1 text-[11px]">
+                Or enter Business invite code:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. BELLA-VIP"
+                  value={joinCode}
+                  onChange={e => setJoinCode(e.target.value)}
+                  className="flex-1 p-2 rounded-lg border border-slate-200 text-xs font-mono uppercase"
+                />
+                <button
+                  onClick={() => {
+                    if (!joinCode.trim()) return;
+                    const matched = programmes.find(
+                      p => p.name.toLowerCase().includes(joinCode.toLowerCase()) || p.id.includes(joinCode.toLowerCase())
+                    ) || programmes[0];
+                    if (matched) {
+                      joinProgrammeAsParticipant(matched.id);
+                    }
+                    setShowJoinModal(false);
+                    setJoinCode('');
+                  }}
+                  className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition text-xs"
+                >
+                  Connect
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

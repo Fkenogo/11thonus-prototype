@@ -83,24 +83,24 @@ export const OperatorConsole: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/30">
-              11thONUS Platform Console
+              11thONUS Operator
             </span>
             <span className="text-xs text-slate-400">
-              Operator: <strong className="text-white">{currentUser.name}</strong> ({currentUser.operatorRole || 'Platform Admin'})
+              Logged in: <strong className="text-white">{currentUser.name}</strong> ({currentUser.operatorRole || 'Platform Operations'})
             </span>
           </div>
           <h1 className="text-xl font-bold font-display mt-1">
-            Platform Operations & Trust Command
+            Platform Overview & Governance
           </h1>
           <p className="text-xs text-slate-400">
-            Authoritative visibility over organisations, loyalty mechanics, consumption, and systemic integrity.
+            Live operational oversight across participating businesses, customer loyalty cycles, and platform integrity.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="px-3 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Platform Status: Healthy (99.98%)</span>
+            <span>Platform Status: Healthy (100%)</span>
           </div>
         </div>
       </div>
@@ -108,16 +108,16 @@ export const OperatorConsole: React.FC = () => {
       {/* Operator Navigation Pill Bar */}
       <div className="bg-white rounded-xl border border-slate-200 p-2 shadow-xs flex items-center gap-1 overflow-x-auto">
         {[
-          { id: 'overview', label: 'Command Centre', icon: Activity },
-          { id: 'organisations', label: 'Organisations', icon: Building2, badge: organisations.length },
+          { id: 'overview', label: 'Platform Overview', icon: Activity },
+          { id: 'organisations', label: 'Businesses', icon: Building2, badge: organisations.length },
           { id: 'participants', label: 'Participants', icon: Users },
-          { id: 'loyalty_ops', label: 'Loyalty Engine Ops', icon: Award },
-          { id: 'integrity', label: 'Trust & Integrity', icon: AlertTriangle, alertBadge: openIntegrityCases.length },
-          { id: 'support', label: 'Support Queue', icon: LifeBuoy, alertBadge: openSupportCases.length },
-          { id: 'commercial', label: 'Commercial Ops', icon: CreditCard },
-          { id: 'markets', label: 'Countries & Markets', icon: Globe2 },
+          { id: 'loyalty_ops', label: 'Loyalty Cycles', icon: Award },
+          { id: 'integrity', label: 'Activity & Integrity', icon: AlertTriangle, alertBadge: openIntegrityCases.length },
+          { id: 'support', label: 'Support & Exceptions', icon: LifeBuoy, alertBadge: openSupportCases.length },
+          { id: 'commercial', label: 'Billing & Usage', icon: CreditCard },
+          { id: 'markets', label: 'Markets & Currencies', icon: Globe2 },
           { id: 'health', label: 'System Health', icon: Activity },
-          { id: 'audit', label: 'Audit Log', icon: FileText }
+          { id: 'audit', label: 'Audit Trail', icon: FileText }
         ].map(nav => {
           const Icon = nav.icon;
           const isActive = activeNav === nav.id;
@@ -146,7 +146,7 @@ export const OperatorConsole: React.FC = () => {
         })}
       </div>
 
-      {/* ================= SECTION 1: COMMAND CENTRE ================= */}
+      {/* ================= SECTION 1: PLATFORM OVERVIEW ================= */}
       {activeNav === 'overview' && (
         <div className="space-y-6">
           {/* Key KPI Cards */}

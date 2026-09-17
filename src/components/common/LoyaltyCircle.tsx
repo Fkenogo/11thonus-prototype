@@ -242,23 +242,33 @@ export const LoyaltyCircle: React.FC<LoyaltyCircleProps> = ({
       {showLabels && (
         <div className="mt-3 text-center max-w-[280px]">
           {rewardAvailable ? (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
-              <Gift className="w-3.5 h-3.5 text-amber-600" />
-              <span>Circle Completed — Ready to Redeem!</span>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold shadow-2xs">
+              <Gift className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Circle Complete — Next {qualifyingItemName} is On Us!</span>
+            </div>
+          ) : approvedSteps === 10 ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>10 of 10 Completed — 11th Reward Ready!</span>
             </div>
           ) : approvedSteps === 9 ? (
-            <p className="text-xs font-semibold text-amber-800">
-              🔥 1 more {qualifyingItemName} until your 11th is on {businessName || 'us'}!
+            <p className="text-xs font-bold text-amber-800 bg-amber-50/60 px-2.5 py-1 rounded-full border border-amber-200">
+              1 more {qualifyingItemName} until your 11th is on {businessName || 'us'}!
             </p>
           ) : pendingSteps > 0 ? (
-            <p className="text-xs text-amber-700 flex items-center justify-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{approvedSteps} of 10 approved ({pendingSteps} pending approval)</span>
+            <div className="text-xs text-amber-800 bg-amber-50/60 px-2.5 py-1 rounded-full border border-amber-200 flex items-center justify-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>
+                <strong>{approvedSteps}</strong> approved • <strong>{pendingSteps}</strong> pending approval
+              </span>
+            </div>
+          ) : approvedSteps === 0 ? (
+            <p className="text-xs text-slate-500 font-medium">
+              Circle #{cycleNumber} started • Complete 10 to earn your 11th on us
             </p>
           ) : (
-            <p className="text-xs text-slate-600">
-              <span className="font-semibold text-slate-900">{approvedSteps} of 10</span> completed
-              {10 - approvedSteps > 0 && ` • ${10 - approvedSteps} visits remaining`}
+            <p className="text-xs text-slate-600 font-medium">
+              <strong className="text-slate-900 font-bold">{approvedSteps} of 10</strong> visits completed • {10 - approvedSteps} to go
             </p>
           )}
         </div>

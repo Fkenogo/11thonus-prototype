@@ -53,7 +53,8 @@ export const BusinessWorkspace: React.FC = () => {
     toggleStaffStatus,
     topUpCommercialBalance,
     createOrganisation,
-    switchOrganisation
+    switchOrganisation,
+    switchRole
   } = useApp();
 
   const isOwner = activeRole === 'business_owner';
@@ -86,17 +87,33 @@ export const BusinessWorkspace: React.FC = () => {
   const [inviteRole, setInviteRole] = useState<UserRole>('frontline_staff');
   const [inviteTitle, setInviteTitle] = useState('Frontline Specialist');
 
-  // New Programme Wizard State (Section 11)
+  // New Programme Wizard State (Section 5 & 11)
   const [wizardStep, setWizardStep] = useState(1);
   const [newProgName, setNewProgName] = useState('');
   const [newProgCategory, setNewProgCategory] = useState('Salon Care');
   const [newProgDesc, setNewProgDesc] = useState('');
   const [newProgItemName, setNewProgItemName] = useState('');
   const [newProgPrice, setNewProgPrice] = useState(25000);
-  const [newProgAllowMulti, setNewProgAllowMulti] = useState(true);
+  const [newProgAllowMulti, setNewProgAllowMulti] = useState(false);
   const [newProgMaxUnits, setNewProgMaxUnits] = useState(3);
   const [newProgApprovalAbove, setNewProgApprovalAbove] = useState(2);
   const [newProgStatus, setNewProgStatus] = useState<ProgrammeStatus>('active');
+  const [showAdvancedRules, setShowAdvancedRules] = useState(false);
+
+  // Onboarding Wizard State (Section 4: Business -> First Programme -> Team -> Ready)
+  const [onboardStep, setOnboardStep] = useState<number>(1);
+  const [onboardOrgName, setOnboardOrgName] = useState('Bella Salon');
+  const [onboardCategory, setOnboardCategory] = useState('Salon & Personal Care');
+  const [onboardCity, setOnboardCity] = useState('Bujumbura');
+  const [onboardCountry, setOnboardCountry] = useState('Burundi');
+  const [onboardCurrency, setOnboardCurrency] = useState('BIF');
+  const [onboardProgName, setOnboardProgName] = useState('Deluxe Haircut');
+  const [onboardProgItem, setOnboardProgItem] = useState('Haircut');
+  const [onboardProgPrice, setOnboardProgPrice] = useState(25000);
+  const [onboardStaffName, setOnboardStaffName] = useState('Diane K.');
+  const [onboardStaffEmail, setOnboardStaffEmail] = useState('diane@bellasalon.bi');
+  const [onboardStaffPhone, setOnboardStaffPhone] = useState('+257 79 12 34 56');
+  const [onboardCreatedOrgName, setOnboardCreatedOrgName] = useState('');
 
   // Filtered data for this organisation
   const orgProgrammes = programmes.filter(p => p.orgId === currentOrg.id);
@@ -137,6 +154,53 @@ export const BusinessWorkspace: React.FC = () => {
     setActiveTab('programmes');
     setWizardStep(1);
     setNewProgName('');
+  };
+
+  const handleCompleteOnboarding = () => {
+    createOrganisation({
+      name: onboardOrgName || 'Bella Salon',
+      category: onboardCategory,
+      primaryContact: currentUser.name || 'Business Owner',
+      email: currentUser.email || 'owner@bellasalon.bi',
+      phone: '+257 79 00 00 00',
+      address: 'Central Boulevard',
+      city: onboardCity,
+      country: onboardCountry,
+      currency: onboardCurrency,
+      logoText: (onboardOrgName || 'BS').substring(0, 2).toUpperCase()
+    });
+
+    createProgramme({
+      name: onboardProgName || 'Deluxe Haircut',
+      category: onboardCategory,
+      description: `Buy 10 ${onboardProgItem || 'Haircut'}, get the 11th on us`,
+      qualifyingItemName: onboardProgItem || 'Haircut',
+      sellingPrice: Number(onboardProgPrice) || 25000,
+      currency: onboardCurrency,
+      status: 'active',
+      rules: {
+        allowMultipleUnits: false,
+        maxUnitsPerTx: 1,
+        requireApprovalAbove: 2,
+        customerConfirmation: false,
+        allowBackdated: false
+      },
+      requiredSteps: 10,
+      rewardDescription: `11th ${onboardProgItem || 'Haircut'} is on ${onboardOrgName || 'Bella Salon'}`
+    });
+
+    if (onboardStaffName && onboardStaffEmail) {
+      inviteStaffMember({
+        name: onboardStaffName,
+        email: onboardStaffEmail,
+        phone: onboardStaffPhone || '+257 79 12 34 56',
+        role: 'frontline_staff',
+        title: 'Counter Specialist'
+      });
+    }
+
+    setOnboardCreatedOrgName(onboardOrgName);
+    setOnboardStep(4);
   };
 
   const handleInviteSubmit = (e: React.FormEvent) => {
@@ -220,6 +284,52 @@ export const BusinessWorkspace: React.FC = () => {
       {/* ================= TAB 1: COMMAND CENTRE ================= */}
       {activeTab === 'dashboard' && (
         <div className="space-y-6">
+          {/* Quick Actions Bar */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 text-slate-700">
+              <Sparkles className="w-4 h-4 text-amber-600" />
+              <span className="font-semibold">Quick Actions:</span>
+            </div>
+            <div className="flex items-center flex-wrap gap-2">
+              <button
+                onClick={() => {
+                  setWizardStep(1);
+                  setActiveTab('new_programme_wizard');
+                }}
+                className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold flex items-center gap-1.5 transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Programme</span>
+              </button>
+              {isOwner && (
+                <button
+                  onClick={() => {
+                    setOnboardStep(1);
+                    setActiveTab('onboarding_wizard');
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-semibold flex items-center gap-1.5 transition"
+                >
+                  <Building2 className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Setup Guide / New Business</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-semibold flex items-center gap-1.5 transition"
+              >
+                <Users className="w-3.5 h-3.5 text-slate-600" />
+                <span>Invite Staff</span>
+              </button>
+              <button
+                onClick={() => switchRole('frontline_staff')}
+                className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold flex items-center gap-1.5 transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Open Counter View</span>
+              </button>
+            </div>
+          </div>
+
           {/* Quick Metrics Banner */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
@@ -1097,7 +1207,7 @@ export const BusinessWorkspace: React.FC = () => {
         </div>
       )}
 
-      {/* ================= NEW PROGRAMME GUIDED WIZARD (Section 11) ================= */}
+      {/* ================= NEW PROGRAMME GUIDED WIZARD (Section 5 & 11) ================= */}
       {activeTab === 'new_programme_wizard' && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs max-w-2xl mx-auto space-y-6">
           <div>
@@ -1113,23 +1223,23 @@ export const BusinessWorkspace: React.FC = () => {
               </button>
             </div>
             <h2 className="text-xl font-bold font-display text-slate-900 mt-1">
-              {wizardStep === 1 && 'What are you rewarding?'}
-              {wizardStep === 2 && 'Confirm Reward Proposition'}
-              {wizardStep === 3 && 'Participation Guardrails'}
-              {wizardStep === 4 && 'Human-Readable Review & Activation'}
+              {wizardStep === 1 && '1. What are you rewarding?'}
+              {wizardStep === 2 && '2. What does the customer receive after 10?'}
+              {wizardStep === 3 && '3. Operating rules'}
+              {wizardStep === 4 && '4. Plain-Language Review & Launch'}
             </h2>
           </div>
 
           {wizardStep === 1 && (
             <div className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Programme / Offering Name *</label>
+                <label className="font-bold text-slate-700">Programme / Service Name *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Deluxe Manicure, Signature Coffee, Oil Change"
+                  placeholder="e.g. Deluxe Haircut, Signature Flat White, Oil Change"
                   value={newProgName}
                   onChange={e => setNewProgName(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 font-medium"
                 />
               </div>
 
@@ -1145,6 +1255,7 @@ export const BusinessWorkspace: React.FC = () => {
                   <option>Food & Specialty Beverage</option>
                   <option>Auto Detailing</option>
                   <option>Laundry & Dry Cleaning</option>
+                  <option>Fitness & Wellness</option>
                 </select>
               </div>
 
@@ -1152,59 +1263,68 @@ export const BusinessWorkspace: React.FC = () => {
                 <label className="font-bold text-slate-700">Qualifying Item Name *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Manicure, Cappuccino, Car Wash"
+                  placeholder="e.g. Haircut, Cappuccino, Car Wash"
                   value={newProgItemName}
                   onChange={e => setNewProgItemName(e.target.value)}
-                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
                 />
+                <span className="text-[11px] text-slate-400">The specific item or service recorded at the counter.</span>
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Normal Selling Price ({currentOrg.currency})</label>
+                <label className="font-bold text-slate-700">Normal Selling Price ({currentOrg.currency}) *</label>
                 <input
                   type="number"
                   value={newProgPrice}
                   onChange={e => setNewProgPrice(Number(e.target.value))}
-                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
                 />
               </div>
 
               <button
                 onClick={() => setWizardStep(2)}
-                disabled={!newProgName}
-                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition mt-2"
+                disabled={!newProgName || !newProgItemName}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition mt-2 shadow-xs"
               >
-                Next: Configure Reward →
+                Next: What customer receives →
               </button>
             </div>
           )}
 
           {wizardStep === 2 && (
             <div className="space-y-4 text-xs">
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-center">
+              <div className="p-5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-3 text-center">
                 <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider">
                   The Core 11thONUS Proposition
                 </span>
-                <div className="text-lg font-bold text-amber-950 font-display">
+                <div className="text-xl font-bold text-amber-950 font-display">
                   Buy 10. The 11th is On Us.
                 </div>
-                <p className="text-amber-800 text-xs max-w-md mx-auto">
-                  When a customer purchases 10 approved {newProgItemName || 'items'}, their next {newProgItemName || 'item'} is 100% on {currentOrg.name}.
+                <p className="text-amber-900 text-xs max-w-md mx-auto leading-relaxed">
+                  Customers complete 10 qualifying purchases of <strong>{newProgItemName || 'Item'}</strong>.
+                  Their next <strong>{newProgItemName || 'Item'}</strong> is 100% on <strong>{currentOrg.name}</strong>.
                 </p>
+              </div>
+
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 space-y-1.5 text-xs">
+                <span className="font-bold text-slate-900 block">How it works for your customer:</span>
+                <p>• Steps 1–9 fill the visual loyalty circle on their phone or counter receipt.</p>
+                <p>• Step 10 completes the circle, making their 11th visit completely on {currentOrg.name}.</p>
+                <p>• Clean, predictable, and honest — no confusing points or fluctuating exchange rates.</p>
               </div>
 
               <div className="flex justify-between pt-2">
                 <button
                   onClick={() => setWizardStep(1)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs"
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs hover:bg-slate-50"
                 >
                   ← Back
                 </button>
                 <button
                   onClick={() => setWizardStep(3)}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-xs"
                 >
-                  Next: Participation Rules →
+                  Next: Operating Rules →
                 </button>
               </div>
             </div>
@@ -1212,44 +1332,71 @@ export const BusinessWorkspace: React.FC = () => {
 
           {wizardStep === 3 && (
             <div className="space-y-4 text-xs">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200">
-                  <div>
-                    <span className="font-bold text-slate-900 block">Allow Multiple Units</span>
-                    <span className="text-slate-500 text-[11px]">Can a customer pay for a friend in the same visit?</span>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={newProgAllowMulti}
-                    onChange={e => setNewProgAllowMulti(e.target.checked)}
-                    className="w-4 h-4 text-amber-600 rounded"
-                  />
+              {/* Primary Operating Rule */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Standard Operating Baseline</span>
+                <div className="font-semibold text-slate-900">
+                  Standard 10-purchase circle. 1 qualifying visit recorded per transaction.
                 </div>
+                <p className="text-slate-500 text-[11px]">
+                  Most businesses run smoothly with standard defaults without needing to configure complex rules.
+                </p>
+              </div>
 
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Require Manager Approval Above (Units)</label>
-                  <select
-                    value={newProgApprovalAbove}
-                    onChange={e => setNewProgApprovalAbove(Number(e.target.value))}
-                    className="w-full p-2.5 rounded-lg border border-slate-200 text-xs"
-                  >
-                    <option value={1}>Above 1 unit</option>
-                    <option value={2}>Above 2 units (Recommended)</option>
-                    <option value={3}>Above 3 units</option>
-                  </select>
-                </div>
+              {/* Progressive Disclosure for Advanced Controls */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedRules(!showAdvancedRules)}
+                  className="w-full p-3 bg-white text-left flex items-center justify-between text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  <span>Need to adjust operating rules? (Advanced)</span>
+                  <span className="text-amber-700 font-bold">{showAdvancedRules ? 'Hide ▲' : 'Show ▼'}</span>
+                </button>
+
+                {showAdvancedRules && (
+                  <div className="p-4 bg-slate-50/50 border-t border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white">
+                      <div>
+                        <span className="font-bold text-slate-900 block">Allow Multiple Units in One Visit</span>
+                        <span className="text-slate-500 text-[11px]">Can a customer pay for companions in the same transaction?</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={newProgAllowMulti}
+                        onChange={e => setNewProgAllowMulti(e.target.checked)}
+                        className="w-4 h-4 text-amber-600 rounded"
+                      />
+                    </div>
+
+                    {newProgAllowMulti && (
+                      <div className="space-y-1">
+                        <label className="font-bold text-slate-700">Require Manager Approval Above (Units)</label>
+                        <select
+                          value={newProgApprovalAbove}
+                          onChange={e => setNewProgApprovalAbove(Number(e.target.value))}
+                          className="w-full p-2.5 rounded-lg border border-slate-200 text-xs bg-white"
+                        >
+                          <option value={1}>Above 1 unit</option>
+                          <option value={2}>Above 2 units (Recommended)</option>
+                          <option value={3}>Above 3 units</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-between pt-2">
                 <button
                   onClick={() => setWizardStep(2)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs"
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs hover:bg-slate-50"
                 >
                   ← Back
                 </button>
                 <button
                   onClick={() => setWizardStep(4)}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-xs"
                 >
                   Next: Review & Launch →
                 </button>
@@ -1259,23 +1406,26 @@ export const BusinessWorkspace: React.FC = () => {
 
           {wizardStep === 4 && (
             <div className="space-y-4 text-xs">
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                <span className="text-[10px] uppercase font-bold text-slate-400">Plain Business Summary</span>
-                <p className="text-slate-800 text-sm font-medium leading-relaxed">
-                  "Customers earn one step every time they purchase a <strong>{newProgItemName || 'Service'}</strong> at {currentOrg.name}.
-                  After 10 approved purchases, their next <strong>{newProgItemName || 'Service'}</strong> is on us."
+              <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2">
+                <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider">Human-Readable Summary</span>
+                <p className="text-amber-950 text-sm font-semibold leading-relaxed">
+                  "Customers complete 10 qualifying <strong>{newProgItemName || 'purchases'}</strong>. Their next <strong>{newProgItemName || 'purchase'}</strong> is on <strong>{currentOrg.name}</strong>."
                 </p>
+                <div className="text-[11px] text-amber-800 pt-1">
+                  Selling price: {newProgPrice.toLocaleString()} {currentOrg.currency} • Circle capacity: 10 steps
+                </div>
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Initial State</label>
-                <div className="flex items-center gap-3">
+                <label className="font-bold text-slate-700">Activation State</label>
+                <div className="flex items-center gap-4 pt-1">
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="radio"
                       name="status"
                       checked={newProgStatus === 'active'}
                       onChange={() => setNewProgStatus('active')}
+                      className="text-amber-600"
                     />
                     <span className="font-semibold text-emerald-700">Activate Immediately</span>
                   </label>
@@ -1285,6 +1435,7 @@ export const BusinessWorkspace: React.FC = () => {
                       name="status"
                       checked={newProgStatus === 'draft'}
                       onChange={() => setNewProgStatus('draft')}
+                      className="text-amber-600"
                     />
                     <span className="font-semibold text-slate-600">Save as Draft</span>
                   </label>
@@ -1294,7 +1445,7 @@ export const BusinessWorkspace: React.FC = () => {
               <div className="flex justify-between pt-2">
                 <button
                   onClick={() => setWizardStep(3)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs"
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs hover:bg-slate-50"
                 >
                   ← Back
                 </button>
@@ -1303,6 +1454,285 @@ export const BusinessWorkspace: React.FC = () => {
                   className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-xs"
                 >
                   Launch Programme
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= ONBOARDING WIZARD (Section 4) ================= */}
+      {activeTab === 'onboarding_wizard' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs max-w-2xl mx-auto space-y-6">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-700">
+                Organisation Setup • Step {onboardStep} of 4
+              </span>
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className="text-xs text-slate-400 hover:text-slate-600"
+              >
+                Exit Setup
+              </button>
+            </div>
+            <h2 className="text-xl font-bold font-display text-slate-900 mt-1">
+              {onboardStep === 1 && '1. Tell us about your business'}
+              {onboardStep === 2 && '2. Create your first loyalty programme'}
+              {onboardStep === 3 && '3. Invite your frontline team'}
+              {onboardStep === 4 && '4. Ready to start!'}
+            </h2>
+          </div>
+
+          {/* Step 1: Business */}
+          {onboardStep === 1 && (
+            <div className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Business Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Bella Salon, Lake View Cafe"
+                  value={onboardOrgName}
+                  onChange={e => setOnboardOrgName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Industry Category</label>
+                <select
+                  value={onboardCategory}
+                  onChange={e => setOnboardCategory(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs"
+                >
+                  <option>Salon & Personal Care</option>
+                  <option>Food & Specialty Coffee</option>
+                  <option>Auto Detailing & Care</option>
+                  <option>Dry Cleaning & Laundry</option>
+                  <option>Wellness & Fitness</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Country</label>
+                  <select
+                    value={onboardCountry}
+                    onChange={e => setOnboardCountry(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200 text-xs"
+                  >
+                    <option value="Burundi">Burundi</option>
+                    <option value="Rwanda">Rwanda</option>
+                    <option value="Uganda">Uganda</option>
+                    <option value="Kenya">Kenya</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">City</label>
+                  <input
+                    type="text"
+                    value={onboardCity}
+                    onChange={e => setOnboardCity(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Operating Currency</label>
+                <input
+                  type="text"
+                  value={onboardCurrency}
+                  onChange={e => setOnboardCurrency(e.target.value)}
+                  placeholder="e.g. BIF, RWF, USD"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <button
+                onClick={() => setOnboardStep(2)}
+                disabled={!onboardOrgName}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition mt-2 shadow-xs"
+              >
+                Next: First Programme →
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: First Programme */}
+          {onboardStep === 2 && (
+            <div className="space-y-4 text-xs">
+              <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1 text-center">
+                <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider">The 11thONUS Rule</span>
+                <div className="text-base font-bold text-amber-950">Buy 10. The 11th is On Us.</div>
+                <p className="text-amber-800 text-xs">
+                  Your customers complete 10 purchases, then earn their 11th visit free.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">What service or item are you rewarding? *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Deluxe Haircut, Signature Flat White"
+                  value={onboardProgName}
+                  onChange={e => setOnboardProgName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Item Name Recorded at Counter *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Haircut, Cappuccino"
+                  value={onboardProgItem}
+                  onChange={e => setOnboardProgItem(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Standard Price ({onboardCurrency}) *</label>
+                <input
+                  type="number"
+                  value={onboardProgPrice}
+                  onChange={e => setOnboardProgPrice(Number(e.target.value))}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <button
+                  onClick={() => setOnboardStep(1)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs hover:bg-slate-50"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={() => setOnboardStep(3)}
+                  disabled={!onboardProgName || !onboardProgItem}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs shadow-xs"
+                >
+                  Next: Team Setup →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Team */}
+          {onboardStep === 3 && (
+            <div className="space-y-4 text-xs">
+              <p className="text-slate-600">
+                Frontline staff need quick access to record customer visits at the counter. Invite your first counter specialist now, or skip to add later.
+              </p>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Team Member Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Diane K."
+                  value={onboardStaffName}
+                  onChange={e => setOnboardStaffName(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Email Address</label>
+                <input
+                  type="email"
+                  placeholder="e.g. diane@bellasalon.bi"
+                  value={onboardStaffEmail}
+                  onChange={e => setOnboardStaffEmail(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="e.g. +257 79 12 34 56"
+                  value={onboardStaffPhone}
+                  onChange={e => setOnboardStaffPhone(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border border-slate-200 text-xs font-medium"
+                />
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <button
+                  onClick={() => setOnboardStep(2)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 font-semibold text-xs hover:bg-slate-50"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleCompleteOnboarding}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-xs"
+                >
+                  Complete Setup →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Ready! */}
+          {onboardStep === 4 && (
+            <div className="space-y-5 text-center py-2">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <Check className="w-8 h-8" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold font-display text-slate-900">
+                  {onboardCreatedOrgName || onboardOrgName} is ready to start recognising loyal customers.
+                </h3>
+                <p className="text-xs text-slate-600 max-w-md mx-auto">
+                  Your business is set up with <strong>{onboardProgName}</strong> and ready to record qualifying visits.
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-left text-xs max-w-md mx-auto space-y-2">
+                <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px] block">
+                  Configuration Summary
+                </span>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Business:</span>
+                  <strong className="text-slate-900">{onboardCreatedOrgName || onboardOrgName}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Active Programme:</span>
+                  <strong className="text-slate-900">{onboardProgName} (10 + 1 On Us)</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Normal Price:</span>
+                  <strong className="text-slate-900">{onboardProgPrice.toLocaleString()} {onboardCurrency}</strong>
+                </div>
+                {onboardStaffName && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Invited Specialist:</span>
+                    <strong className="text-slate-900">{onboardStaffName}</strong>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={() => switchRole('frontline_staff')}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs shadow-xs transition"
+                >
+                  Open Frontline Counter →
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('dashboard');
+                    setOnboardStep(1);
+                  }}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-lg text-xs transition"
+                >
+                  Open Command Centre
                 </button>
               </div>
             </div>

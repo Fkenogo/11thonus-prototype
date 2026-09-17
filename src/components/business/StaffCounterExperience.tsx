@@ -28,7 +28,8 @@ export const StaffCounterExperience: React.FC = () => {
     transactions,
     completedRewards,
     recordQualifyingPurchase,
-    redeemReward
+    redeemReward,
+    registerWalkInCustomer
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,6 +49,11 @@ export const StaffCounterExperience: React.FC = () => {
   const activeProgrammes = programmes.filter(
     p => p.orgId === currentOrg.id && (p.status === 'active' || p.status === 'draft')
   );
+
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [allowPurchaseOverride, setAllowPurchaseOverride] = useState(false);
 
   // Available participants
   const participants = users.filter(u => u.role === 'participant');
@@ -193,47 +199,82 @@ export const StaffCounterExperience: React.FC = () => {
 
             {/* Quick participant list pills */}
             <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-              {filteredParticipants.map(participant => {
-                const isSelected = participant.id === selectedCustomerId;
-                return (
+              {filteredParticipants.length === 0 ? (
+                <div className="p-4 text-center border border-dashed border-slate-200 rounded-xl space-y-2">
+                  <p className="text-xs text-slate-500">
+                    No customer matches "{searchQuery}"
+                  </p>
                   <button
-                    key={participant.id}
                     onClick={() => {
-                      setSelectedCustomerId(participant.id);
-                      setLastActionResult(null);
+                      setNewCustomerName(searchQuery);
+                      setShowQuickAddModal(true);
                     }}
-                    className={`w-full text-left p-2.5 rounded-lg transition border flex items-center justify-between ${
-                      isSelected
-                        ? 'bg-amber-50/80 border-amber-300 text-amber-950 font-semibold'
-                        : 'bg-white border-slate-100 hover:bg-slate-50 text-slate-700'
-                    }`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-2xs"
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                          isSelected
-                            ? 'bg-amber-600 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {participant.initials}
-                      </div>
-                      <div>
-                        <div className="text-xs font-semibold leading-tight">
-                          {participant.name}
-                        </div>
-                        <div className="text-[11px] text-slate-400 leading-tight">
-                          {participant.phone} • {participant.onusId}
-                        </div>
-                      </div>
-                    </div>
-
-                    {isSelected && (
-                      <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
-                    )}
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Register Walk-in Customer</span>
                   </button>
-                );
-              })}
+                </div>
+              ) : (
+                filteredParticipants.map(participant => {
+                  const isSelected = participant.id === selectedCustomerId;
+                  const rel = relationships.find(
+                    r => r.customerId === participant.id && r.orgId === currentOrg.id
+                  );
+                  const hasRew = rel?.rewardAvailable;
+                  return (
+                    <button
+                      key={participant.id}
+                      onClick={() => {
+                        setSelectedCustomerId(participant.id);
+                        setLastActionResult(null);
+                        setAllowPurchaseOverride(false);
+                      }}
+                      className={`w-full text-left p-2.5 rounded-lg transition border flex items-center justify-between ${
+                        isSelected
+                          ? 'bg-amber-50/80 border-amber-300 text-amber-950 font-semibold'
+                          : 'bg-white border-slate-100 hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isSelected
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {participant.initials}
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold leading-tight flex items-center gap-1.5">
+                            <span>{participant.name}</span>
+                            {hasRew && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-amber-200 text-amber-950 uppercase">
+                                11th Ready
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 leading-tight">
+                            {participant.phone} • {participant.onusId}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {rel && (
+                          <span className="text-[11px] font-bold text-slate-600">
+                            {hasRew ? '🎁' : `${rel.approvedSteps}/10`}
+                          </span>
+                        )}
+                        {isSelected && (
+                          <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -347,7 +388,7 @@ export const StaffCounterExperience: React.FC = () => {
               </div>
 
               {/* IF REWARD AVAILABLE: Prominent 1-Click Redemption */}
-              {hasRewardAvailable ? (
+              {hasRewardAvailable && !allowPurchaseOverride ? (
                 <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -373,10 +414,34 @@ export const StaffCounterExperience: React.FC = () => {
                     <CheckCircle2 className="w-4 h-4 text-amber-600" />
                     <span>Redeem 11th Reward Now</span>
                   </button>
+
+                  <div className="pt-2 border-t border-white/20 flex items-center justify-between text-[11px]">
+                    <span className="text-amber-200">Customer paying for another visit today?</span>
+                    <button
+                      onClick={() => setAllowPurchaseOverride(true)}
+                      className="underline font-semibold text-white hover:text-amber-100"
+                    >
+                      Record purchase instead
+                    </button>
+                  </div>
                 </div>
               ) : (
                 /* NORMAL ACTION: Record Qualifying Purchase */
                 <div className="space-y-4 pt-2">
+                  {hasRewardAvailable && allowPurchaseOverride && (
+                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 flex items-center justify-between">
+                      <span className="font-medium">
+                        Reward is ready, recording purchase as requested.
+                      </span>
+                      <button
+                        onClick={() => setAllowPurchaseOverride(false)}
+                        className="text-[11px] font-bold underline text-amber-800"
+                      >
+                        Back to Redeem
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-700">
                       Quantity of Qualifying Purchases
@@ -575,6 +640,90 @@ export const StaffCounterExperience: React.FC = () => {
               >
                 <span>Jean-Luc Tuyisenge (ONUS-5542-JEANL)</span>
                 <span className="text-[10px] text-slate-500">6 of 10</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Walk-In Customer Modal */}
+      {showQuickAddModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5 text-amber-600" />
+                <h3 className="font-bold text-sm text-slate-900">
+                  Register Walk-in Customer
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowQuickAddModal(false)}
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Register this customer to instantly start their 10-visit loyalty circle for {selectedProgramme?.name || 'this programme'}.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Customer Full Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Marie Claire"
+                  value={newCustomerName}
+                  onChange={e => setNewCustomerName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. +257 79 123 456"
+                  value={newCustomerPhone}
+                  onChange={e => setNewCustomerPhone(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowQuickAddModal(false)}
+                className="px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!newCustomerName.trim()}
+                onClick={() => {
+                  if (!selectedProgramme) return;
+                  const newId = registerWalkInCustomer({
+                    name: newCustomerName.trim(),
+                    phone: newCustomerPhone.trim() || '+257 70 000 000',
+                    programmeId: selectedProgramme.id
+                  });
+                  setSelectedCustomerId(newId);
+                  setShowQuickAddModal(false);
+                  setNewCustomerName('');
+                  setNewCustomerPhone('');
+                  setSearchQuery('');
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg shadow-sm transition disabled:opacity-50"
+              >
+                Create & Select Member
               </button>
             </div>
           </div>
