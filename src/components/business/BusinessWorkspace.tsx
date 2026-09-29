@@ -28,8 +28,54 @@ import {
   Calendar
 } from 'lucide-react';
 import { LoyaltyCircle } from '../common/LoyaltyCircle';
-import { UserRole, ProgrammeStatus, ParticipantRelationship } from '../../types';
+import { UserRole, ProgrammeStatus, ParticipantRelationship, Organisation } from '../../types';
 import { MobileNavigation } from './MobileNavigation';
+
+/**
+ * Business-facing commercial standing notice (informational only).
+ * Derives from the SAME underlying state the Operator Console uses —
+ * no separate Business interpretation, no new state machine, and no
+ * Administrator capabilities. Healthy businesses render nothing.
+ */
+const CommercialStandingNotice: React.FC<{ org: Organisation }> = ({ org }) => {
+  const isRestricted =
+    org.status === 'restricted' ||
+    org.status === 'suspended' ||
+    org.commercialStanding === 'restricted' ||
+    org.commercialStanding === 'suspended';
+  const isGraceOnly = !isRestricted && org.gracePeriodActive;
+
+  if (isRestricted) {
+    return (
+      <div className="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/60 shadow-xs space-y-2">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <h2 className="text-sm font-bold text-slate-900 leading-tight">New loyalty circles are paused</h2>
+        </div>
+        <ul className="text-xs text-amber-950 space-y-1 list-disc pl-5">
+          <li>New circles can&apos;t start right now — there is no usable commercial balance.</li>
+          <li>Circles already in progress can still finish{org.gracePeriodActive ? ' (grace is active, but grace does not create new commercial capacity)' : ''}.</li>
+          <li>Customers&apos; earned rewards remain available and redeemable — nothing is cancelled and loyalty history stays intact.</li>
+          <li>To start new circles again, add commercial balance or contact 11thONUS support.</li>
+        </ul>
+      </div>
+    );
+  }
+
+  if (isGraceOnly) {
+    return (
+      <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs text-blue-950 flex items-start gap-2">
+        <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+        <div>
+          <strong>Existing circles can still finish. </strong>
+          Grace preserves circles already in progress and their earned rewards, but does not create new commercial capacity — starting new circles needs usable commercial balance. Add balance or contact 11thONUS support.
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
 
 export const BusinessWorkspace: React.FC = () => {
   const {
@@ -336,6 +382,8 @@ export const BusinessWorkspace: React.FC = () => {
         <div className="space-y-6">
           {/* ================= MOBILE-FIRST DASHBOARD STACK (md:hidden) ================= */}
           <div className="md:hidden space-y-5">
+            {/* Commercial standing — visible to Owner and Manager */}
+            <CommercialStandingNotice org={currentOrg} />
             {/* 1. HIGH-PRIORITY 'ATTENTION NEEDED' QUEUE */}
             <section id="mobile-attention-queue" className="space-y-3">
               <div className="flex items-center justify-between">
@@ -673,6 +721,8 @@ export const BusinessWorkspace: React.FC = () => {
 
           {/* ================= MULTI-COLUMN DESKTOP DASHBOARD (hidden md:block) ================= */}
           <div className="hidden md:block space-y-6">
+            {/* Commercial standing — visible to Owner and Manager */}
+            <CommercialStandingNotice org={currentOrg} />
             {/* Quick Actions Bar */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-slate-700">
@@ -1762,6 +1812,8 @@ export const BusinessWorkspace: React.FC = () => {
       {/* ================= TAB 7: COMMERCIAL & USAGE (Section 26 - Owner Only) ================= */}
       {activeTab === 'commercial' && isOwner && (
         <div className="space-y-6">
+          {/* Commercial standing — same truth as the dashboard notice */}
+          <CommercialStandingNotice org={currentOrg} />
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>

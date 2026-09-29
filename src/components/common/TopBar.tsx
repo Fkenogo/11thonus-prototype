@@ -133,7 +133,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition active:scale-95"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-100" />
-            <span>Guided Tour (23 Steps)</span>
+            <span>Guided Tour (10 Steps)</span>
           </button>
         </div>
 

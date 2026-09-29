@@ -75,7 +75,7 @@ export const ScriptedDemoModal: React.FC<ScriptedDemoModalProps> = ({
       step: 5,
       title: '5. Staff Records the 10th Qualifying Haircut!',
       roleTarget: 'frontline_staff',
-      description: 'Diane records the 10th visit. Instantly triggers "Circle Completed! 11th ON US Unlocked!" Generates unique redemption code.',
+      description: 'Diane records the 10th visit. Instantly triggers "Circle Completed! 11th ON US Unlocked!" The participant\u2019s 11thONUS identity/reference is displayed for the counter experience (fixed demo reference in this prototype).',
       icon: Gift,
       badge: 'Key Milestone'
     },
