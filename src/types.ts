@@ -50,7 +50,18 @@ export interface User {
   initials: string;
   title?: string;
   active: boolean;
+  /**
+   * Experience-oriented redemption authority grant.
+   * Permission-based, not title-based. Prototype-only representation of
+   * the governed grant — NOT production auth internals.
+   * - 'authorised': may perform the Business confirmation.
+   * - 'revoked': previously authorised, grant withdrawn (stale screens must reflect this).
+   * - 'none': no grant (default for Staff/trusted users, Platform Admin, Customer).
+   */
+  redemptionAuthority?: RedemptionAuthority;
 }
+
+export type RedemptionAuthority = 'authorised' | 'revoked' | 'none';
 
 export interface Organisation {
   id: string;

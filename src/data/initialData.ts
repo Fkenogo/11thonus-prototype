@@ -230,7 +230,8 @@ export const INITIAL_USERS: User[] = [
     orgId: 'org-bella-salon',
     initials: 'GN',
     title: 'Founder & Owner',
-    active: true
+    active: true,
+    redemptionAuthority: 'authorised'
   },
   {
     id: 'user-patrick-manager',
@@ -241,7 +242,8 @@ export const INITIAL_USERS: User[] = [
     orgId: 'org-bella-salon',
     initials: 'PM',
     title: 'Salon Operations Manager',
-    active: true
+    active: true,
+    redemptionAuthority: 'authorised'
   },
   {
     id: 'user-diane-staff',
@@ -252,7 +254,8 @@ export const INITIAL_USERS: User[] = [
     orgId: 'org-bella-salon',
     initials: 'DK',
     title: 'Senior Stylist & Frontline',
-    active: true
+    active: true,
+    redemptionAuthority: 'none'
   },
   // Participant
   {
@@ -299,7 +302,8 @@ export const INITIAL_USERS: User[] = [
     operatorRole: 'platform_admin',
     initials: 'MT',
     title: 'Platform Lead & Trust Architect',
-    active: true
+    active: true,
+    redemptionAuthority: 'none'
   }
 ];
 

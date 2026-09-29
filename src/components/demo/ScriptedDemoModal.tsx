@@ -30,7 +30,8 @@ export const ScriptedDemoModal: React.FC<ScriptedDemoModalProps> = ({
     jumpToDemoStep,
     currentDemoStep,
     resetDemoData,
-    switchRole
+    switchRole,
+    applyRedemptionScenario
   } = useApp();
 
   if (!isOpen) return null;
@@ -147,6 +148,37 @@ export const ScriptedDemoModal: React.FC<ScriptedDemoModalProps> = ({
 
         {/* Scripted Step Selector */}
         <div className="p-5 overflow-y-auto space-y-2.5 flex-1 divide-y divide-slate-100">
+          {/* Redemption review scenarios (deterministic entry points) */}
+          <div className="pb-2">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-1 pb-2">
+              Redemption review scenarios
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { id: 'authorised', title: '1 · Authorised frontline confirm', desc: 'Diane holds an explicit grant. Identify Amina, confirm the reward, see the fresh cycle.' },
+                { id: 'staff-blocked', title: '2 · Staff not authorised', desc: 'Diane sees the ready reward but cannot confirm — directed to an authorised member.' },
+                { id: 'manager-revoked', title: '3 · Manager authority revoked', desc: 'Patrick’s grant is withdrawn. Workspace reflects current authority, not the title.' },
+                { id: 'participant-ready', title: '4 · Participant reward ready', desc: 'Amina sees the ready reward and knows to show her identity code. No customer tap.' },
+                { id: 'after-redemption', title: '5 · After redemption', desc: 'Redeemed history plus a fresh 0/10 earning cycle for Amina; confirmer named.' },
+                { id: 'already-redeemed', title: '6 · Already redeemed', desc: 'Repeat confirmation shows a safe “already redeemed” state — never a second redemption.' }
+              ].map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    applyRedemptionScenario(s.id as any);
+                    onClose();
+                  }}
+                  className="p-3 rounded-xl border border-amber-200 bg-amber-50/60 hover:bg-amber-50 text-left transition"
+                >
+                  <span className="font-bold text-xs text-slate-900 block">{s.title}</span>
+                  <span className="text-[11px] text-slate-600 block mt-0.5">{s.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-1 pt-2">
+            Full cross-role walkthrough
+          </p>
           {demoSteps.map(item => {
             const Icon = item.icon;
             const isCurrent = currentDemoStep === item.step;
