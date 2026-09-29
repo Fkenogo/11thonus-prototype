@@ -28,7 +28,8 @@ export const ParticipantExperience: React.FC = () => {
     transactions,
     completedRewards,
     joinProgrammeAsParticipant,
-    participantSeesConfirmer
+    participantSeesConfirmer,
+    showToast
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'home' | 'programmes' | 'activity' | 'profile'>('home');
@@ -695,12 +696,18 @@ export const ParticipantExperience: React.FC = () => {
                     if (!joinCode.trim()) return;
                     const matched = programmes.find(
                       p => p.name.toLowerCase().includes(joinCode.toLowerCase()) || p.id.includes(joinCode.toLowerCase())
-                    ) || programmes[0];
+                    );
                     if (matched) {
                       joinProgrammeAsParticipant(matched.id);
+                      setShowJoinModal(false);
+                      setJoinCode('');
+                    } else {
+                      showToast({
+                        title: 'No business found for that code',
+                        description: 'Check the code with the business, or join from the list above.',
+                        type: 'info'
+                      });
                     }
-                    setShowJoinModal(false);
-                    setJoinCode('');
                   }}
                   className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition text-xs"
                 >

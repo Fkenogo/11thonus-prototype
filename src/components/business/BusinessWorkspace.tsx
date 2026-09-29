@@ -1620,8 +1620,8 @@ export const BusinessWorkspace: React.FC = () => {
       {/* ================= TAB 5: TEAM & STAFF (Section 13) ================= */}
       {activeTab === 'team' && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold text-slate-900">
                 Staff & Access Management
               </h2>
@@ -1635,7 +1635,7 @@ export const BusinessWorkspace: React.FC = () => {
             {isOwner && (
               <button
                 onClick={() => setShowInviteModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-xs transition"
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-xs transition"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>Invite Staff</span>
