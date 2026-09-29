@@ -31,7 +31,9 @@ export const ScriptedDemoModal: React.FC<ScriptedDemoModalProps> = ({
     currentDemoStep,
     resetDemoData,
     switchRole,
-    applyRedemptionScenario
+    applyRedemptionScenario,
+    participantSeesConfirmer,
+    setParticipantSeesConfirmer
   } = useApp();
 
   if (!isOpen) return null;
@@ -175,6 +177,41 @@ export const ScriptedDemoModal: React.FC<ScriptedDemoModalProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-1 pt-2">
+            Redemption review options
+          </p>
+          <div className="p-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 space-y-2">
+            <p className="text-[11px] font-bold text-slate-700">
+              Participant confirmer-name privacy (Founder choice)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                onClick={() => setParticipantSeesConfirmer(false)}
+                className={`p-2.5 rounded-xl border text-left transition ${
+                  !participantSeesConfirmer
+                    ? 'bg-white border-emerald-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <span className="font-bold text-xs text-slate-900 block">Option A · Business only {!participantSeesConfirmer && '(active)'}</span>
+                <span className="text-[11px] text-slate-600 block mt-0.5">“Reward redeemed at Bella Salon” — no employee name.</span>
+              </button>
+              <button
+                onClick={() => setParticipantSeesConfirmer(true)}
+                className={`p-2.5 rounded-xl border text-left transition ${
+                  participantSeesConfirmer
+                    ? 'bg-white border-emerald-400 shadow-xs'
+                    : 'bg-white border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <span className="font-bold text-xs text-slate-900 block">Option B · Named confirmer {participantSeesConfirmer && '(active)'}</span>
+                <span className="text-[11px] text-slate-600 block mt-0.5">“Reward confirmed by Diane” — employee named.</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Business-side attribution stays visible either way. Prototype flag only — not policy.
+            </p>
           </div>
           <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-1 pt-2">
             Full cross-role walkthrough

@@ -87,6 +87,16 @@ interface AppContextType {
   setRedemptionAuthority: (userId: string, authority: RedemptionAuthority) => void;
   applyRedemptionScenario: (scenario: 'authorised' | 'staff-blocked' | 'manager-revoked' | 'participant-ready' | 'after-redemption' | 'already-redeemed') => void;
 
+  /**
+   * Experience Reference choice for Founder review (privacy question).
+   * false (Option A, default): participant sees "Reward redeemed at {Business}"
+   *   without the individual confirmer's name.
+   * true (Option B): participant sees "Reward confirmed by {name}".
+   * Business-side attribution is always visible. Prototype flag only — NOT policy.
+   */
+  participantSeesConfirmer: boolean;
+  setParticipantSeesConfirmer: (show: boolean) => void;
+
   approvePendingItem: (approvalId: string) => void;
   rejectPendingItem: (approvalId: string, reason: string) => void;
   reverseTransaction: (txId: string, reason: string) => void;
@@ -137,6 +147,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [deviceView, setDeviceView] = useState<'desktop' | 'mobile_frame'>('desktop');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [currentDemoStep, setCurrentDemoStep] = useState<number>(0);
+  const [participantSeesConfirmer, setParticipantSeesConfirmer] = useState<boolean>(false);
 
   const currentUser = users.find(u => u.id === currentUserId) || users[0];
   const currentOrg = organisations.find(o => o.id === currentOrgId) || organisations[0];
@@ -411,7 +422,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // 2. REDEEM REWARD (permission-enforced, experience-oriented)
+  // 2. REDEEM REWARD (permission-enforced, experience-oriented).
+  // PROTOTYPE SCAFFOLDING ONLY: `redemptionAuthority` exists solely to render
+  // governed experience states for review. It is NOT production authorization
+  // architecture — production authority comes from the accepted backend/Product Truth.
   const resolveAuthority = (user: User): RedemptionAuthority | 'suspended' => {
     if (!user.active) return 'suspended';
     if (user.role === 'platform_operator' || user.role === 'participant') return 'none';
@@ -438,51 +452,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  /** Ensure Amina's Bella Salon premium circle sits at reward-ready (deterministic demo state). */
-  const ensureBellaRewardReady = (): void => {
+  /**
+   * Deterministic scenario precondition: Amina's Bella Salon premium circle
+   * sits at reward-ready. Prototype scenario scaffolding only — each review
+   * scenario re-establishes its own precondition so switching scenarios in
+   * any order never strands the UI in an impossible combination. Redeemed
+   * history is preserved; only the *current* earning position is reset.
+   * NOT production authorization architecture.
+   */
+  const resetBellaToReady = (): void => {
     const now = new Date().toISOString();
+    // Reset the Bella/Amina demo slice to a known baseline: cycle 1, 10/10,
+    // exactly one available demo reward. Other businesses (e.g. Joe's Coffee)
+    // are untouched so cross-business state stays realistic.
     setRelationships(prev =>
       prev.map(r => {
         if (r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium') {
-          if (r.rewardAvailable) return r;
-          // Never resurrect a freshly redeemed cycle back into reward-ready.
-          if (r.approvedSteps === 0 && r.totalRedeemedRewards > 0) return r;
-          return { ...r, approvedSteps: 10, pendingSteps: 0, rewardAvailable: true, rewardCode: r.rewardCode ?? 'BS-REF-READY', totalCompletedCycles: Math.max(r.totalCompletedCycles, 1), lastActivityAt: now };
+          return {
+            ...r,
+            currentCycle: 1,
+            approvedSteps: 10,
+            pendingSteps: 0,
+            rewardAvailable: true,
+            rewardCode: 'BS-REF-READY',
+            totalCompletedCycles: 1,
+            totalRedeemedRewards: 0,
+            lastActivityAt: now
+          };
         }
         return r;
       })
     );
-    setCompletedRewards(prev => {
-      const existing = prev.find(
-        r => r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium' && r.status === 'available'
-      );
-      if (existing) return prev;
-      return [
-        {
-          id: `rew-bella-amina-${Date.now().toString().slice(-4)}`,
-          orgId: 'org-bella-salon',
-          orgName: 'Bella Salon',
-          programmeId: 'prog-bella-premium',
-          programmeName: 'Premium Haircut & Styling',
-          customerId: 'user-amina-participant',
-          customerName: 'Amina Niyonsaba',
-          rewardCode: 'BS-REF-READY',
-          rewardTitle: '11th Premium Haircut & Styling is on Bella Salon',
-          cycleNumber: 1,
-          earnedAt: now,
-          status: 'available'
-        },
-        ...prev
-      ];
-    });
+    setCompletedRewards(prev => [
+      {
+        id: `rew-bella-amina-demo`,
+        orgId: 'org-bella-salon',
+        orgName: 'Bella Salon',
+        programmeId: 'prog-bella-premium',
+        programmeName: 'Premium Haircut & Styling',
+        customerId: 'user-amina-participant',
+        customerName: 'Amina Niyonsaba',
+        rewardCode: 'BS-REF-READY',
+        rewardTitle: '11th Premium Haircut & Styling is on Bella Salon',
+        cycleNumber: 1,
+        earnedAt: now,
+        status: 'available'
+      },
+      ...prev.filter(r => !(r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium'))
+    ]);
+    // Purge prior demo-slice redemption transactions so review history never
+    // shows duplicate redemptions. Qualifying-purchase history is preserved.
+    setTransactions(prev =>
+      prev.filter(
+        t =>
+          !(
+            t.type === 'reward_redemption' &&
+            t.customerId === 'user-amina-participant' &&
+            t.programmeId === 'prog-bella-premium'
+          )
+      )
+    );
   };
 
   const applyRedemptionScenario = (scenario: 'authorised' | 'staff-blocked' | 'manager-revoked' | 'participant-ready' | 'after-redemption' | 'already-redeemed') => {
+    // Review entry points start from a clean slate: no stale toasts.
+    setToasts([]);
     switch (scenario) {
       case 'authorised':
         // Explicit governed grant so the frontline counter can confirm (Scenario 1).
         setUsers(prev => prev.map(u => (u.id === 'user-diane-staff' ? { ...u, active: true, redemptionAuthority: 'authorised' as RedemptionAuthority } : u)));
-        ensureBellaRewardReady();
+        resetBellaToReady();
         setCurrentUserId('user-diane-staff');
         setActiveRole('frontline_staff');
         setCurrentOrgId('org-bella-salon');
@@ -490,7 +529,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         break;
       case 'staff-blocked':
         setUsers(prev => prev.map(u => (u.id === 'user-diane-staff' ? { ...u, active: true, redemptionAuthority: 'none' as RedemptionAuthority } : u)));
-        ensureBellaRewardReady();
+        resetBellaToReady();
         setCurrentUserId('user-diane-staff');
         setActiveRole('frontline_staff');
         setCurrentOrgId('org-bella-salon');
@@ -498,90 +537,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         break;
       case 'manager-revoked':
         setUsers(prev => prev.map(u => (u.id === 'user-patrick-manager' ? { ...u, active: true, redemptionAuthority: 'revoked' as RedemptionAuthority } : u)));
-        ensureBellaRewardReady();
+        resetBellaToReady();
         setCurrentUserId('user-patrick-manager');
         setActiveRole('business_manager');
         setCurrentOrgId('org-bella-salon');
         setCurrentDemoStep(0);
         break;
       case 'participant-ready':
-        ensureBellaRewardReady();
+        resetBellaToReady();
         setCurrentUserId('user-amina-participant');
         setActiveRole('participant');
         setCurrentDemoStep(0);
         break;
       case 'after-redemption':
       case 'already-redeemed': {
-        // Deterministic redeemed state: confirm as the Owner (Grace), then review.
+        // Deterministic redeemed state: reset the Bella slice to ready, then
+        // confirm once as the Owner (Grace). Exactly one redeemed entry,
+        // cycle 1 → 2, fresh 0/10 — no cumulative duplicates across runs.
+        resetBellaToReady();
         const now = new Date().toISOString();
         const owner = users.find(u => u.id === 'user-grace-owner') ?? currentUser;
-        setCompletedRewards(prev => {
-          const avail = prev.find(
-            r => r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium' && r.status === 'available'
-          );
-          if (avail) {
-            return prev.map(r => (r.id === avail.id ? { ...r, status: 'redeemed' as const, redeemedAt: now, redeemedByStaffId: owner.id, redeemedByStaffName: owner.name } : r));
-          }
-          if (prev.some(r => r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium' && r.status === 'redeemed')) {
-            return prev;
-          }
-          return [
-            {
-              id: `rew-bella-amina-${Date.now().toString().slice(-4)}`,
-              orgId: 'org-bella-salon',
-              orgName: 'Bella Salon',
-              programmeId: 'prog-bella-premium',
-              programmeName: 'Premium Haircut & Styling',
-              customerId: 'user-amina-participant',
-              customerName: 'Amina Niyonsaba',
-              rewardCode: 'BS-REF-READY',
-              rewardTitle: '11th Premium Haircut & Styling is on Bella Salon',
-              cycleNumber: 1,
-              earnedAt: now,
-              redeemedAt: now,
-              redeemedByStaffId: owner.id,
-              redeemedByStaffName: owner.name,
-              status: 'redeemed' as const
-            },
-            ...prev
-          ];
-        });
+        setCompletedRewards(prev =>
+          prev.map(r =>
+            r.id === 'rew-bella-amina-demo'
+              ? { ...r, status: 'redeemed' as const, redeemedAt: now, redeemedByStaffId: owner.id, redeemedByStaffName: owner.name }
+              : r
+          )
+        );
         setRelationships(prev =>
           prev.map(r => {
             if (r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium') {
-              // Idempotent: an already-fresh post-redemption cycle stays untouched.
-              if (!r.rewardAvailable && r.approvedSteps === 0 && r.totalRedeemedRewards > 0) return r;
-              return { ...r, currentCycle: r.currentCycle + 1, approvedSteps: 0, pendingSteps: 0, rewardAvailable: false, rewardCode: undefined, totalCompletedCycles: r.totalCompletedCycles + 1, totalRedeemedRewards: r.totalRedeemedRewards + 1, lastActivityAt: now };
+              return { ...r, currentCycle: 2, approvedSteps: 0, pendingSteps: 0, rewardAvailable: false, rewardCode: undefined, totalCompletedCycles: 1, totalRedeemedRewards: 1, lastActivityAt: now };
             }
             return r;
           })
         );
-        setTransactions(prev => {
-          if (prev.some(t => t.type === 'reward_redemption' && t.customerId === 'user-amina-participant' && t.programmeId === 'prog-bella-premium')) {
-            return prev;
-          }
-          return [
-            {
-              id: `tx-${Date.now().toString().slice(-4)}`,
-              orgId: 'org-bella-salon',
-              programmeId: 'prog-bella-premium',
-              customerId: 'user-amina-participant',
-              customerName: 'Amina Niyonsaba',
-              staffId: owner.id,
-              staffName: owner.name,
-              quantity: 1,
-              type: 'reward_redemption' as const,
-              status: 'approved' as const,
-              cycleBefore: 1,
-              cycleAfter: 2,
-              stepsBefore: 10,
-              stepsAfter: 0,
-              notes: 'Reward redeemed successfully. Next earning cycle started.',
-              createdAt: now
-            },
-            ...prev
-          ];
-        });
+        setTransactions(prev => [
+          {
+            id: `tx-bella-amina-demo`,
+            orgId: 'org-bella-salon',
+            programmeId: 'prog-bella-premium',
+            customerId: 'user-amina-participant',
+            customerName: 'Amina Niyonsaba',
+            staffId: owner.id,
+            staffName: owner.name,
+            quantity: 1,
+            type: 'reward_redemption' as const,
+            status: 'approved' as const,
+            cycleBefore: 1,
+            cycleAfter: 2,
+            stepsBefore: 10,
+            stepsAfter: 0,
+            notes: 'Reward redeemed successfully. Next earning cycle started.',
+            createdAt: now
+          },
+          ...prev.filter(t => t.id !== 'tx-bella-amina-demo')
+        ]);
         if (scenario === 'after-redemption') {
           setCurrentUserId('user-amina-participant');
           setActiveRole('participant');
@@ -708,11 +719,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     showToast({
       title: 'Reward redeemed successfully!',
-      description: `${customer.name}'s reward was applied. Circle #${nextCycle} is now underway.`,
+      description: `${customer.name}'s reward was provided. They can start earning toward the next reward now.`,
       type: 'success'
     });
 
-    return { success: true, message: `Reward redeemed! New cycle #${nextCycle} started.` };
+    return { success: true, message: `Reward redeemed! ${customer.name.split(' ')[0]} can start earning toward the next reward now.` };
   };
 
   // 3. APPROVAL ACTIONS
@@ -1367,7 +1378,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleOrgStatus,
         resetDemoData,
         jumpToDemoStep,
-        currentDemoStep
+        currentDemoStep,
+        participantSeesConfirmer,
+        setParticipantSeesConfirmer
       }}
     >
       {children}

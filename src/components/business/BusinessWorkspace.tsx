@@ -444,6 +444,11 @@ export const BusinessWorkspace: React.FC = () => {
                             <div className="text-[11px] text-slate-500">
                               {prog.name} • 10 visits completed!
                             </div>
+                            {!hasRedemptionAuthority(currentUser.id).authorised && (
+                              <div className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                                Only an authorised team member can confirm.
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1623,6 +1628,9 @@ export const BusinessWorkspace: React.FC = () => {
               <p className="text-xs text-slate-500">
                 Individual accounts with plain-language business permissions. No shared logins.
               </p>
+              <p className="text-[11px] text-slate-400 mt-1 border border-dashed border-slate-300 rounded-lg px-2 py-1.5">
+                Prototype review controls: grant / revoke / suspend below simulate governed authority changes for scenario review — not final Team UX.
+              </p>
             </div>
             {isOwner && (
               <button
@@ -2636,7 +2644,7 @@ export const BusinessWorkspace: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
-                      {actionCustomerRel.rewardAvailable ? 'Redeem 11th ONUS Reward' : 'Record Customer Visit'}
+                      {actionCustomerRel.rewardAvailable ? 'Confirm reward provided' : 'Record Customer Visit'}
                     </h3>
                     <p className="text-[11px] text-slate-500">
                       {customer.name} ({customer.onusId})
@@ -2675,10 +2683,10 @@ export const BusinessWorkspace: React.FC = () => {
                       <span>11th Visit is 100% On Us</span>
                     </div>
                     <p className="text-[11px] text-emerald-800">
-                      Confirm that the Business has provided the reward to {customer.name}. Their loyalty circle will reset to Cycle #{actionCustomerRel.currentCycle + 1}, and they can keep earning immediately. No customer tap needed.
+                      Confirm that the Business has provided the reward to {customer.name}. They will start earning toward the next reward right away. No customer tap is needed.
                     </p>
                     <p className="text-[11px] text-emerald-800 font-semibold">
-                      Confirmed by {currentUser.name} (you) — attributed to the individual confirmer.
+                      This confirmation is recorded under your name ({currentUser.name}).
                     </p>
                   </div>
                   {(() => {

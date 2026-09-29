@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   QrCode,
@@ -128,6 +128,21 @@ export const StaffCounterExperience: React.FC = () => {
   // strip records that the previous reward was already redeemed (and by whom).
   const showRedeemedStrip =
     !hasRewardAvailable && !redemptionSuccess && (customerRelationship?.totalRedeemedRewards ?? 0) > 0 && currentApprovedSteps === 0;
+
+  // Review-flow guard: never show a stale success/confirm state after the
+  // underlying data changed (scenario switch, customer change, authority
+  // change). The panel always reflects the current earning position.
+  useEffect(() => {
+    setRedemptionSuccess(null);
+    setShowConfirmSheet(false);
+  }, [selectedCustomerId, selectedProgrammeId, currentUser.id]);
+  useEffect(() => {
+    if (hasRewardAvailable) {
+      setRedemptionSuccess(null);
+      setLastActionResult(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRewardAvailable]);
 
   // Recent transactions at this counter
   const todayTransactions = transactions
@@ -263,16 +278,16 @@ export const StaffCounterExperience: React.FC = () => {
         </button>
       </div>
 
-      {/* Prototype-only redemption scenario selector (review tooling, not product UI) */}
+      {/* Prototype review controls — collapsed by default, never product UI */}
       <div className="bg-white rounded-xl border border-dashed border-slate-300 px-3 py-2 shadow-xs">
         <button
           onClick={() => setShowScenarios(v => !v)}
           className="w-full flex items-center justify-between text-xs font-semibold text-slate-600 min-h-[36px]"
         >
-          <span className="flex items-center gap-1.5">
-            <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
-            <span>Review scenarios (prototype only){activeScenario ? ` · ${REDEMPTION_SCENARIOS.find(s => s.id === activeScenario)?.label}` : ''}</span>
-          </span>
+            <span className="flex items-center gap-1.5">
+              <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
+              <span>Prototype review controls{activeScenario ? ` · ${REDEMPTION_SCENARIOS.find(s => s.id === activeScenario)?.label}` : ''}</span>
+            </span>
           <span className="text-slate-400">{showScenarios ? '▾' : '▸'}</span>
         </button>
         {showScenarios && (
@@ -525,22 +540,22 @@ export const StaffCounterExperience: React.FC = () => {
                 />
               </div>
 
-              {/* STEP C — REWARD READY: dominant human state, identity-resolved */}
+              {/* STEP E — SUCCESS: slim hierarchy, natural language */}
               {redemptionSuccess ? (
-                <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/20 space-y-3 text-center">
+                <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/20 space-y-2.5 text-center">
                   <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto">
                     <CheckCircle2 className="w-7 h-7 text-white" />
                   </div>
                   <h3 className="font-bold text-lg leading-tight">{copy.successTitle}</h3>
                   <p className="text-sm text-emerald-50">
-                    {redemptionSuccess.firstName}'s {redemptionSuccess.rewardTitle} was provided — confirmed by {redemptionSuccess.confirmerName}.
+                    {redemptionSuccess.firstName}'s {redemptionSuccess.rewardTitle} {copy.successConfirmedLine}
+                    <span className="block text-xs text-emerald-100 mt-1">
+                      Confirmed by {redemptionSuccess.confirmerName} · {redemptionSuccess.firstName} {copy.successNextLine}
+                    </span>
                   </p>
-                  <div className="p-3 rounded-lg bg-white/15 border border-white/20 text-xs font-semibold">
-                    {redemptionSuccess.firstName} can start earning toward the next reward now.
-                  </div>
-                  <div className="flex items-center justify-center gap-2 text-xs font-bold bg-black/15 rounded-lg py-2">
-                    <span>New earning cycle started</span>
+                  <div className="flex items-center justify-center gap-2 text-sm font-bold bg-black/15 rounded-lg py-2.5">
                     <span className="px-2 py-0.5 rounded bg-white/25 font-mono">0 / 10</span>
+                    <span className="text-xs font-semibold">{copy.nextProgressLabel}</span>
                   </div>
                   <button
                     onClick={() => {
@@ -549,7 +564,7 @@ export const StaffCounterExperience: React.FC = () => {
                     }}
                     className="w-full py-3 min-h-[48px] bg-white hover:bg-emerald-50 text-emerald-900 text-sm font-bold rounded-lg shadow-sm transition active:scale-[0.98]"
                   >
-                    Serve next customer
+                    {copy.serveNext}
                   </button>
                 </div>
               ) : hasRewardAvailable && !allowPurchaseOverride ? (
@@ -557,7 +572,7 @@ export const StaffCounterExperience: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <Gift className="w-5 h-5 text-amber-200 animate-pulse" />
                     <span className="font-bold text-sm uppercase tracking-wide">
-                      Reward ready
+                      {copy.rewardReadyEyebrow}
                     </span>
                   </div>
 
@@ -611,9 +626,9 @@ export const StaffCounterExperience: React.FC = () => {
                     <span className="text-amber-200">Customer paying for another visit today?</span>
                     <button
                       onClick={() => setAllowPurchaseOverride(true)}
-                      className="underline font-semibold text-white hover:text-amber-100 min-h-[32px] px-1"
+                      className="underline font-semibold text-white hover:text-amber-100 min-h-[32px] px-1 whitespace-nowrap"
                     >
-                      Record purchase instead
+                      {copy.recordInstead}
                     </button>
                   </div>
                 </div>
@@ -797,7 +812,7 @@ export const StaffCounterExperience: React.FC = () => {
               </div>
               <h3 className="font-bold text-base text-slate-900">{copy.confirmSheetTitle}</h3>
               <p className="text-xs text-slate-500">
-                Confirm the Business has provided the reward. No customer tap is needed.
+                {copy.confirmSheetHelp}
               </p>
             </div>
 
