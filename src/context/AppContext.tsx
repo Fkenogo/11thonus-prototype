@@ -14,7 +14,8 @@ import {
   AuditLogEntry,
   MarketConfig,
   AppLanguage,
-  ProgrammeStatus
+  ProgrammeStatus,
+  RedemptionAuthority
 } from '../types';
 import {
   INITIAL_ORGANISATIONS,
@@ -80,7 +81,21 @@ interface AppContextType {
     rewardId?: string;
     programmeId: string;
     customerId: string;
-  }) => { success: boolean; message: string };
+  }) => { success: boolean; message: string; reason?: 'unauthorised' | 'revoked' | 'suspended' | 'already_redeemed' | 'no_reward' };
+
+  hasRedemptionAuthority: (userId?: string) => { authorised: boolean; status: RedemptionAuthority | 'suspended' };
+  setRedemptionAuthority: (userId: string, authority: RedemptionAuthority) => void;
+  applyRedemptionScenario: (scenario: 'authorised' | 'staff-blocked' | 'manager-revoked' | 'participant-ready' | 'after-redemption' | 'already-redeemed') => void;
+
+  /**
+   * Experience Reference choice for Founder review (privacy question).
+   * false (Option A, default): participant sees "Reward redeemed at {Business}"
+   *   without the individual confirmer's name.
+   * true (Option B): participant sees "Reward confirmed by {name}".
+   * Business-side attribution is always visible. Prototype flag only — NOT policy.
+   */
+  participantSeesConfirmer: boolean;
+  setParticipantSeesConfirmer: (show: boolean) => void;
 
   approvePendingItem: (approvalId: string) => void;
   rejectPendingItem: (approvalId: string, reason: string) => void;
@@ -102,6 +117,22 @@ interface AppContextType {
   resolveIntegrityCase: (caseId: string, notes: string) => void;
   resolveSupportCase: (caseId: string, notes: string) => void;
   toggleOrgStatus: (orgId: string, newStatus: Organisation['status'], reason: string) => void;
+
+  // Launch operator commercial actions (prototype experience only — manual
+  // transitions that payment automation may later perform; no payment gateway).
+  grantTrial: (orgId: string, units: number, reason: string) => void;
+  adjustTrial: (orgId: string, delta: number, reason: string) => void;
+  activatePaidService: (orgId: string, reference: string, note?: string) => void;
+  addCommercialCredit: (orgId: string, amountUSD: number, reference: string) => void;
+  adjustCommercialCredit: (orgId: string, deltaUSD: number, reason: string) => void;
+  restrictBusiness: (orgId: string, reason: string) => void;
+  restoreBusiness: (orgId: string, reason: string) => void;
+  setOnboardingState: (orgId: string, state: Organisation['onboardingState'], reason?: string) => void;
+  updateIntegrityCase: (caseId: string, status: 'open' | 'under_review' | 'resolved' | 'dismissed', notes: string) => void;
+  updateSupportCase: (caseId: string, status: 'open' | 'investigating' | 'resolved', notes: string) => void;
+
+  /** Deterministic prototype review scenarios A–F (operator console only). */
+  applyOperatorScenario: (scenario: 'A' | 'B' | 'C' | 'D' | 'E' | 'F') => void;
 
   // Guided walkthrough
   resetDemoData: () => void;
@@ -132,6 +163,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [deviceView, setDeviceView] = useState<'desktop' | 'mobile_frame'>('desktop');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [currentDemoStep, setCurrentDemoStep] = useState<number>(0);
+  const [participantSeesConfirmer, setParticipantSeesConfirmer] = useState<boolean>(false);
 
   const currentUser = users.find(u => u.id === currentUserId) || users[0];
   const currentOrg = organisations.find(o => o.id === currentOrgId) || organisations[0];
@@ -406,7 +438,192 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  // 2. REDEEM REWARD
+  // 2. REDEEM REWARD (permission-enforced, experience-oriented).
+  // PROTOTYPE SCAFFOLDING ONLY: `redemptionAuthority` exists solely to render
+  // governed experience states for review. It is NOT production authorization
+  // architecture — production authority comes from the accepted backend/Product Truth.
+  const resolveAuthority = (user: User): RedemptionAuthority | 'suspended' => {
+    if (!user.active) return 'suspended';
+    if (user.role === 'platform_operator' || user.role === 'participant') return 'none';
+    if (user.redemptionAuthority) return user.redemptionAuthority;
+    // Accepted defaults: Owner floor + Manager default grant; Staff no default grant.
+    if (user.role === 'business_owner' || user.role === 'business_manager') return 'authorised';
+    return 'none';
+  };
+
+  const hasRedemptionAuthority = (userId?: string) => {
+    const user = userId ? users.find(u => u.id === userId) : currentUser;
+    if (!user) return { authorised: false as const, status: 'none' as RedemptionAuthority | 'suspended' };
+    const status = resolveAuthority(user);
+    return { authorised: status === 'authorised', status };
+  };
+
+  const setRedemptionAuthority = (userId: string, authority: RedemptionAuthority) => {
+    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, redemptionAuthority: authority } : u)));
+    const target = users.find(u => u.id === userId);
+    showToast({
+      title: authority === 'authorised' ? 'Redemption authority granted' : authority === 'revoked' ? 'Redemption authority revoked' : 'Redemption authority removed',
+      description: `${target?.name ?? 'Team member'} can${authority === 'authorised' ? '' : ' no longer'} confirm rewards.`,
+      type: authority === 'authorised' ? 'success' : 'warning'
+    });
+  };
+
+  /**
+   * Deterministic scenario precondition: Amina's Bella Salon premium circle
+   * sits at reward-ready. Prototype scenario scaffolding only — each review
+   * scenario re-establishes its own precondition so switching scenarios in
+   * any order never strands the UI in an impossible combination. Redeemed
+   * history is preserved; only the *current* earning position is reset.
+   * NOT production authorization architecture.
+   */
+  const resetBellaToReady = (): void => {
+    const now = new Date().toISOString();
+    // Reset the Bella/Amina demo slice to a known baseline: cycle 1, 10/10,
+    // exactly one available demo reward. Other businesses (e.g. Joe's Coffee)
+    // are untouched so cross-business state stays realistic.
+    setRelationships(prev =>
+      prev.map(r => {
+        if (r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium') {
+          return {
+            ...r,
+            currentCycle: 1,
+            approvedSteps: 10,
+            pendingSteps: 0,
+            rewardAvailable: true,
+            rewardCode: 'BS-REF-READY',
+            totalCompletedCycles: 1,
+            totalRedeemedRewards: 0,
+            lastActivityAt: now
+          };
+        }
+        return r;
+      })
+    );
+    setCompletedRewards(prev => [
+      {
+        id: `rew-bella-amina-demo`,
+        orgId: 'org-bella-salon',
+        orgName: 'Bella Salon',
+        programmeId: 'prog-bella-premium',
+        programmeName: 'Premium Haircut & Styling',
+        customerId: 'user-amina-participant',
+        customerName: 'Amina Niyonsaba',
+        rewardCode: 'BS-REF-READY',
+        rewardTitle: '11th Premium Haircut & Styling is on Bella Salon',
+        cycleNumber: 1,
+        earnedAt: now,
+        status: 'available'
+      },
+      ...prev.filter(r => !(r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium'))
+    ]);
+    // Purge prior demo-slice redemption transactions so review history never
+    // shows duplicate redemptions. Qualifying-purchase history is preserved.
+    setTransactions(prev =>
+      prev.filter(
+        t =>
+          !(
+            t.type === 'reward_redemption' &&
+            t.customerId === 'user-amina-participant' &&
+            t.programmeId === 'prog-bella-premium'
+          )
+      )
+    );
+  };
+
+  const applyRedemptionScenario = (scenario: 'authorised' | 'staff-blocked' | 'manager-revoked' | 'participant-ready' | 'after-redemption' | 'already-redeemed') => {
+    // Review entry points start from a clean slate: no stale toasts.
+    setToasts([]);
+    switch (scenario) {
+      case 'authorised':
+        // Explicit governed grant so the frontline counter can confirm (Scenario 1).
+        setUsers(prev => prev.map(u => (u.id === 'user-diane-staff' ? { ...u, active: true, redemptionAuthority: 'authorised' as RedemptionAuthority } : u)));
+        resetBellaToReady();
+        setCurrentUserId('user-diane-staff');
+        setActiveRole('frontline_staff');
+        setCurrentOrgId('org-bella-salon');
+        setCurrentDemoStep(0);
+        break;
+      case 'staff-blocked':
+        setUsers(prev => prev.map(u => (u.id === 'user-diane-staff' ? { ...u, active: true, redemptionAuthority: 'none' as RedemptionAuthority } : u)));
+        resetBellaToReady();
+        setCurrentUserId('user-diane-staff');
+        setActiveRole('frontline_staff');
+        setCurrentOrgId('org-bella-salon');
+        setCurrentDemoStep(0);
+        break;
+      case 'manager-revoked':
+        setUsers(prev => prev.map(u => (u.id === 'user-patrick-manager' ? { ...u, active: true, redemptionAuthority: 'revoked' as RedemptionAuthority } : u)));
+        resetBellaToReady();
+        setCurrentUserId('user-patrick-manager');
+        setActiveRole('business_manager');
+        setCurrentOrgId('org-bella-salon');
+        setCurrentDemoStep(0);
+        break;
+      case 'participant-ready':
+        resetBellaToReady();
+        setCurrentUserId('user-amina-participant');
+        setActiveRole('participant');
+        setCurrentDemoStep(0);
+        break;
+      case 'after-redemption':
+      case 'already-redeemed': {
+        // Deterministic redeemed state: reset the Bella slice to ready, then
+        // confirm once as the Owner (Grace). Exactly one redeemed entry,
+        // cycle 1 → 2, fresh 0/10 — no cumulative duplicates across runs.
+        resetBellaToReady();
+        const now = new Date().toISOString();
+        const owner = users.find(u => u.id === 'user-grace-owner') ?? currentUser;
+        setCompletedRewards(prev =>
+          prev.map(r =>
+            r.id === 'rew-bella-amina-demo'
+              ? { ...r, status: 'redeemed' as const, redeemedAt: now, redeemedByStaffId: owner.id, redeemedByStaffName: owner.name }
+              : r
+          )
+        );
+        setRelationships(prev =>
+          prev.map(r => {
+            if (r.customerId === 'user-amina-participant' && r.programmeId === 'prog-bella-premium') {
+              return { ...r, currentCycle: 2, approvedSteps: 0, pendingSteps: 0, rewardAvailable: false, rewardCode: undefined, totalCompletedCycles: 1, totalRedeemedRewards: 1, lastActivityAt: now };
+            }
+            return r;
+          })
+        );
+        setTransactions(prev => [
+          {
+            id: `tx-bella-amina-demo`,
+            orgId: 'org-bella-salon',
+            programmeId: 'prog-bella-premium',
+            customerId: 'user-amina-participant',
+            customerName: 'Amina Niyonsaba',
+            staffId: owner.id,
+            staffName: owner.name,
+            quantity: 1,
+            type: 'reward_redemption' as const,
+            status: 'approved' as const,
+            cycleBefore: 1,
+            cycleAfter: 2,
+            stepsBefore: 10,
+            stepsAfter: 0,
+            notes: 'Reward redeemed successfully. Next earning cycle started.',
+            createdAt: now
+          },
+          ...prev.filter(t => t.id !== 'tx-bella-amina-demo')
+        ]);
+        if (scenario === 'after-redemption') {
+          setCurrentUserId('user-amina-participant');
+          setActiveRole('participant');
+        } else {
+          setUsers(prev => prev.map(u => (u.id === 'user-diane-staff' ? { ...u, redemptionAuthority: 'authorised' as RedemptionAuthority } : u)));
+          setCurrentUserId('user-diane-staff');
+          setActiveRole('frontline_staff');
+          setCurrentOrgId('org-bella-salon');
+        }
+        setCurrentDemoStep(0);
+        break;
+      }
+    }
+  };
+
   const redeemReward = ({
     rewardId,
     programmeId,
@@ -421,8 +638,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const staff = currentUser;
     const rel = relationships.find(r => r.programmeId === programmeId && r.customerId === customerId);
 
-    if (!rel || !rel.rewardAvailable || !programme || !customer) {
-      return { success: false, message: 'No active reward available for redemption.' };
+    // Permission gate: platform operators and customers never hold Business authority.
+    const authority = resolveAuthority(staff);
+    if (authority !== 'authorised') {
+      const reason = (authority === 'revoked' ? 'revoked' : authority === 'suspended' ? 'suspended' : 'unauthorised') as 'revoked' | 'suspended' | 'unauthorised';
+      return { success: false as const, message: 'Confirmation requires an authorised team member.', reason };
+    }
+
+    if (!rel || !programme || !customer) {
+      return { success: false as const, message: 'No active reward available for redemption.', reason: 'no_reward' as const };
+    }
+
+    if (!rel.rewardAvailable) {
+      // Safe double-action state: a repeat confirm must not look like a second redemption.
+      const wasRedeemed =
+        rel.totalRedeemedRewards > 0 ||
+        completedRewards.some(r => r.customerId === customerId && r.programmeId === programmeId && r.status === 'redeemed');
+      return {
+        success: false as const,
+        message: 'This reward has already been redeemed.',
+        reason: (wasRedeemed ? 'already_redeemed' : 'no_reward') as 'already_redeemed' | 'no_reward'
+      };
     }
 
     const now = new Date().toISOString();
@@ -499,11 +735,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     showToast({
       title: 'Reward redeemed successfully!',
-      description: `${customer.name}'s reward was applied. Circle #${nextCycle} is now underway.`,
+      description: `${customer.name}'s reward was provided. They can start earning toward the next reward now.`,
       type: 'success'
     });
 
-    return { success: true, message: `Reward redeemed! New cycle #${nextCycle} started.` };
+    return { success: true, message: `Reward redeemed! ${customer.name.split(' ')[0]} can start earning toward the next reward now.` };
   };
 
   // 3. APPROVAL ACTIONS
@@ -759,9 +995,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'active',
       logoText: (orgData.name || 'NO').slice(0, 2).toUpperCase(),
       primaryContact: orgData.primaryContact || currentUser.name,
-      trialCirclesRemaining: 25,
+      trialCirclesRemaining: 5,
       completedBillableCircles: 0,
-      creditBalanceUSD: 25.0,
+      creditBalanceUSD: 0.0,
       lowCreditAlert: false,
       gracePeriodActive: false,
       createdAt: new Date().toISOString().split('T')[0]
@@ -831,7 +1067,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       orgId: currentOrg.id,
       initials,
       title,
-      active: true
+      active: true,
+      // Governed default: newly invited team members hold no redemption
+      // authority until an explicit grant is made.
+      redemptionAuthority: 'none'
     };
 
     setUsers(prev => [...prev, newUser]);
@@ -978,6 +1217,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // 7. OPERATOR ACTIONS
+  const pushAudit = (entry: Omit<AuditLogEntry, 'id' | 'timestamp'>) => {
+    const now = new Date().toISOString();
+    setAuditLogs(prev => [
+      { ...entry, id: `aud-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 99)}`, timestamp: now },
+      ...prev
+    ]);
+  };
+
+  const adminName = 'Platform Administrator';
   const resolveIntegrityCase = (caseId: string, notes: string) => {
     setIntegrityCases(prev => prev.map(c => {
       if (c.id !== caseId) return c;
@@ -1005,30 +1253,351 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleOrgStatus = (orgId: string, newStatus: Organisation['status'], reason: string) => {
-    setOrganisations(prev => prev.map(o => {
+    const prev = organisations.find(o => o.id === orgId);
+    setOrganisations(prevOrgs => prevOrgs.map(o => {
       if (o.id !== orgId) return o;
       return { ...o, status: newStatus };
     }));
 
-    setAuditLogs(prev => [
-      {
-        id: `aud-${Date.now().toString().slice(-4)}`,
-        actorName: currentUser.name,
-        actorRole: 'Platform Operator',
-        action: 'ORGANISATION_STATUS_AMENDED',
-        targetType: 'Organisation',
-        targetId: orgId,
-        reason,
-        timestamp: new Date().toISOString()
-      },
-      ...prev
-    ]);
+    pushAudit({
+      actorName: currentUser.name || adminName,
+      actorRole: 'Platform Administrator',
+      action: 'ORGANISATION_STATUS_AMENDED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `status: ${prev?.status ?? 'unknown'}`,
+      newState: `status: ${newStatus}`
+    });
 
     showToast({
       title: 'Organisation status updated',
       description: `Organisation is now ${newStatus}. Logged in platform audit history.`,
       type: 'warning'
     });
+  };
+
+  // ---- Launch commercial operations (manual, governed, audited) ----
+  const grantTrial = (orgId: string, units: number, reason: string) => {
+    // Prototype entry bound (3–5-unit governed trial direction): grants are
+    // capped at 5 units. This cap is an experience guardrail, not a claim
+    // that 5 is the universally governed default.
+    const bounded = Math.max(1, Math.min(5, Math.round(units)));
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.trialCirclesRemaining;
+    const allowance = (org.trialAllowanceTotal ?? 5);
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        trialCirclesRemaining: o.trialCirclesRemaining + bounded,
+        trialAllowanceTotal: allowance,
+        status: o.status === 'onboarding' ? 'trial' : o.status,
+        onboardingState: 'trial_ready',
+        commercialStanding: o.paidActive ? 'paid_active' : 'trial'
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'TRIAL_GRANTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: reason || `Trial granted (${bounded} units).`,
+      previousState: `trialRemaining: ${before}`,
+      newState: `trialRemaining: ${before + bounded}`
+    });
+    showToast({ title: 'Trial granted', description: `${org.name}: +${bounded} trial units. Now trial-ready.`, type: 'success' });
+  };
+
+  const adjustTrial = (orgId: string, delta: number, reason: string) => {
+    // Small plausible extension/adjustment within the 3–5-unit trial model.
+    // The ±5 prototype entry bound is NOT a governed trial rule.
+    const bounded = Math.max(-5, Math.min(5, Math.round(delta)));
+    if (bounded === 0) return;
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.trialCirclesRemaining;
+    const after = Math.max(0, before + bounded);
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      const standing: Organisation['commercialStanding'] =
+        o.paidActive ? 'paid_active' : after === 0 && o.creditBalanceUSD <= 0 ? 'restricted' : after > 0 ? 'trial' : o.commercialStanding;
+      return { ...o, trialCirclesRemaining: after, commercialStanding: standing };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'TRIAL_ADJUSTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: reason || `Trial adjusted (${bounded > 0 ? '+' : ''}${bounded}).`,
+      previousState: `trialRemaining: ${before}`,
+      newState: `trialRemaining: ${after}`
+    });
+    showToast({ title: 'Trial adjusted', description: `${org.name}: trial ${before} → ${after}.`, type: 'info' });
+  };
+
+  const activatePaidService = (orgId: string, reference: string, note?: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const now = new Date().toISOString();
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        paidActive: true,
+        paidActivatedAt: now,
+        paidActivationRef: reference,
+        manualActivation: { activatedAt: now, activatedBy: adminName, reference, note },
+        status: 'active',
+        onboardingState: 'commercially_active',
+        commercialStanding: 'paid_active',
+        gracePeriodActive: false
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'PAID_SERVICE_MANUALLY_ACTIVATED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: `Offline payment confirmed. Ref ${reference}.${note ? ` ${note}` : ''}`,
+      previousState: `commercialStanding: ${org.commercialStanding ?? 'unknown'}`,
+      newState: 'commercialStanding: paid_active'
+    });
+    showToast({ title: 'Paid service activated', description: `${org.name} manually activated under paid terms. Ref ${reference}.`, type: 'success' });
+  };
+
+  const addCommercialCredit = (orgId: string, amountUSD: number, reference: string) => {
+    const bounded = Math.max(1, Math.min(500, Math.round(amountUSD)));
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.creditBalanceUSD;
+    const after = before + bounded;
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      const clearsRestriction = after > 0;
+      return {
+        ...o,
+        creditBalanceUSD: after,
+        lowCreditAlert: after < 5 && o.trialCirclesRemaining === 0,
+        gracePeriodActive: after <= 0,
+        commercialStanding: clearsRestriction
+          ? (o.paidActive ? 'paid_active' : o.trialCirclesRemaining > 0 ? 'trial' : 'paid_active')
+          : o.commercialStanding,
+        status: clearsRestriction && o.status === 'restricted' ? 'active' : o.status
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'CREDIT_ADDED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: `Approved credit added: $${bounded}. Ref ${reference}.`,
+      previousState: `credit: $${before.toFixed(2)}`,
+      newState: `credit: $${after.toFixed(2)}`
+    });
+    showToast({ title: 'Commercial credit added', description: `${org.name}: $${before.toFixed(2)} → $${after.toFixed(2)}.`, type: 'success' });
+  };
+
+  const adjustCommercialCredit = (orgId: string, deltaUSD: number, reason: string) => {
+    const bounded = Math.max(-50, Math.min(100, Math.round(deltaUSD)));
+    if (bounded === 0 || !reason.trim()) return;
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.creditBalanceUSD;
+    // Governed principle: negative credit may be recoverable. No maximum
+    // negative balance is invented here — the balance simply moves.
+    const after = before + bounded;
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        creditBalanceUSD: after,
+        lowCreditAlert: after < 5 && o.trialCirclesRemaining === 0,
+        gracePeriodActive: after <= 0 ? true : false,
+        commercialStanding: after <= 0 ? 'grace' : o.commercialStanding
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'CREDIT_ADJUSTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `credit: $${before.toFixed(2)}`,
+      newState: `credit: $${after.toFixed(2)}`
+    });
+    showToast({ title: 'Credit adjusted', description: `${org.name}: $${before.toFixed(2)} → $${after.toFixed(2)}.`, type: 'info' });
+  };
+
+  const restrictBusiness = (orgId: string, reason: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return { ...o, status: 'restricted', commercialStanding: 'restricted' as const };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'BUSINESS_RESTRICTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `status: ${org.status} / standing: ${org.commercialStanding ?? 'unknown'}`,
+      newState: 'status: restricted / standing: restricted (earned rewards + active cycles preserved)'
+    });
+    showToast({ title: 'Business restricted', description: `${org.name}: new starts blocked. Earned rewards remain redeemable.`, type: 'warning' });
+  };
+
+  const restoreBusiness = (orgId: string, reason: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const standing: Organisation['commercialStanding'] =
+      org.paidActive ? 'paid_active' : org.trialCirclesRemaining > 0 ? 'trial' : org.creditBalanceUSD > 0 ? 'paid_active' : 'grace';
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        status: standing === 'grace' ? 'restricted' : 'active',
+        commercialStanding: standing,
+        gracePeriodActive: standing === 'grace',
+        lowCreditAlert: o.creditBalanceUSD < 5 && o.trialCirclesRemaining === 0
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'BUSINESS_RESTORED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `status: ${org.status} / standing: ${org.commercialStanding ?? 'unknown'}`,
+      newState: `status: ${standing === 'grace' ? 'restricted' : 'active'} / standing: ${standing}`
+    });
+    showToast({ title: 'Standing restored', description: `${org.name}: commercial standing → ${standing}.`, type: 'success' });
+  };
+
+  const setOnboardingState = (orgId: string, state: Organisation['onboardingState'], reason?: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        onboardingState: state,
+        status: state === 'commercially_active' ? 'active' : state === 'trial_ready' ? (o.status === 'onboarding' ? 'trial' : o.status) : o.status
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'ONBOARDING_STATE_UPDATED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: reason || `Onboarding → ${state}.`,
+      previousState: `onboarding: ${org.onboardingState ?? 'unknown'}`,
+      newState: `onboarding: ${state}`
+    });
+  };
+
+  const updateIntegrityCase = (caseId: string, status: 'open' | 'under_review' | 'resolved' | 'dismissed', notes: string) => {
+    setIntegrityCases(prev => prev.map(c => {
+      if (c.id !== caseId) return c;
+      return {
+        ...c,
+        status,
+        investigationNotes: notes ? `${c.investigationNotes ? c.investigationNotes + ' | ' : ''}${notes}` : c.investigationNotes,
+        resolutionNotes: status === 'resolved' || status === 'dismissed' ? notes : c.resolutionNotes
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: status === 'resolved' ? 'INTEGRITY_CASE_RESOLVED' : status === 'dismissed' ? 'INTEGRITY_CASE_DISMISSED' : 'INTEGRITY_CASE_REVIEWED',
+      targetType: 'IntegrityCase',
+      targetId: caseId,
+      reason: notes || `Integrity case → ${status}.`
+    });
+    showToast({ title: `Integrity case ${status.replace('_', ' ')}`, description: 'Investigation record preserved in audit.', type: 'info' });
+  };
+
+  const updateSupportCase = (caseId: string, status: 'open' | 'investigating' | 'resolved', notes: string) => {
+    setSupportCases(prev => prev.map(c => {
+      if (c.id !== caseId) return c;
+      return {
+        ...c,
+        status,
+        investigationNotes: notes ? `${c.investigationNotes ? c.investigationNotes + ' | ' : ''}${notes}` : c.investigationNotes,
+        resolutionNotes: status === 'resolved' ? notes : c.resolutionNotes
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: status === 'resolved' ? 'SUPPORT_CASE_RESOLVED' : 'SUPPORT_CASE_STATUS_UPDATED',
+      targetType: 'SupportCase',
+      targetId: caseId,
+      reason: notes || `Support case → ${status}.`
+    });
+    showToast({ title: `Support case ${status}`, description: 'Case progress recorded.', type: 'info' });
+  };
+
+  const applyOperatorScenario = (scenario: 'A' | 'B' | 'C' | 'D' | 'E' | 'F') => {
+    setToasts([]);
+    if (scenario === 'A') {
+      // New Business awaiting trial (governed 3–5-unit trial model: 5-unit example)
+      setOrganisations(prev => prev.map(o => o.id === 'org-kivu-bistro' ? {
+        ...o, status: 'onboarding' as const, onboardingState: 'ready' as const,
+        trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 0,
+        paidActive: false, commercialStanding: 'trial' as const, gracePeriodActive: false
+      } : o));
+      setSupportCases(INITIAL_SUPPORT_CASES);
+      showToast({ title: 'Scenario A ready', description: 'Kivu Fresh Bistro is onboarding-ready with no trial. Grant trial from Businesses or Commercial.', type: 'info' });
+    } else if (scenario === 'B') {
+      // Trial nearing exhaustion: 5 granted, 4 consumed, 1 remaining.
+      // "1 remaining" is an Experience Reference presentation threshold,
+      // not a governed commercial rule.
+      setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {
+        ...o, status: 'trial' as const, onboardingState: 'trial_ready' as const,
+        trialCirclesRemaining: 1, trialAllowanceTotal: 5, creditBalanceUSD: 12,
+        paidActive: false, commercialStanding: 'trial' as const
+      } : o));
+      showToast({ title: 'Scenario B ready', description: "Joe's Coffee: 1 trial unit left. Review consumption, grant a bounded extension.", type: 'info' });
+    } else if (scenario === 'C') {
+      // Offline payment confirmed → manual activation (5-unit trial consumed)
+      setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {
+        ...o, trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 12, paidActive: false,
+        status: 'trial' as const, onboardingState: 'trial_ready' as const, commercialStanding: 'trial' as const
+      } : o));
+      showToast({ title: 'Scenario C ready', description: "Joe's Coffee trial exhausted with offline payment pending. Manually activate paid service.", type: 'info' });
+    } else if (scenario === 'D') {
+      // Add commercial credit (trial consumed: 5 granted, 5 used)
+      setOrganisations(prev => prev.map(o => o.id === 'org-sparkle-wash' ? {
+        ...o, trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 2, lowCreditAlert: true,
+        status: 'active' as const, commercialStanding: 'grace' as const, gracePeriodActive: true, paidActive: false
+      } : o));
+      showToast({ title: 'Scenario D ready', description: 'Sparkle Car Wash: $2.00 credit. Add approved credit and watch balance/history update.', type: 'info' });
+    } else if (scenario === 'E') {
+      // Zero credit / restricted new starts (trial consumed: 5 granted, 5 used).
+      // New starts blocked; active circles may finish; earned rewards stay redeemable.
+      setOrganisations(prev => prev.map(o => o.id === 'org-sparkle-wash' ? {
+        ...o, trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 0, lowCreditAlert: true,
+        status: 'restricted' as const, commercialStanding: 'grace' as const,
+        gracePeriodActive: true, paidActive: false,
+        operatorNote: 'Zero credit: new starts blocked. Active circles may finish; earned rewards remain redeemable; loyalty history intact.'
+      } : o));
+      showToast({ title: 'Scenario E ready', description: 'Sparkle Car Wash: zero credit, new starts blocked. Restore after commercial resolution.', type: 'info' });
+    } else {
+      setSupportCases(INITIAL_SUPPORT_CASES);
+      setIntegrityCases(INITIAL_INTEGRITY_CASES);
+      showToast({ title: 'Scenario F ready', description: 'Support queue reset. Open SUP-8804 (Kivu setup) and jump into the linked Business 360°.', type: 'info' });
+    }
   };
 
   // 8. GUIDED SCRIPTED DEMO STEPS (Sections 55 - 58)
@@ -1136,6 +1705,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast,
         recordQualifyingPurchase,
         redeemReward,
+        hasRedemptionAuthority,
+        setRedemptionAuthority,
+        applyRedemptionScenario,
         approvePendingItem,
         rejectPendingItem,
         reverseTransaction,
@@ -1150,9 +1722,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resolveIntegrityCase,
         resolveSupportCase,
         toggleOrgStatus,
+        grantTrial,
+        adjustTrial,
+        activatePaidService,
+        addCommercialCredit,
+        adjustCommercialCredit,
+        restrictBusiness,
+        restoreBusiness,
+        setOnboardingState,
+        updateIntegrityCase,
+        updateSupportCase,
+        applyOperatorScenario,
         resetDemoData,
         jumpToDemoStep,
-        currentDemoStep
+        currentDemoStep,
+        participantSeesConfirmer,
+        setParticipantSeesConfirmer
       }}
     >
       {children}

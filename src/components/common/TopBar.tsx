@@ -7,7 +7,6 @@ import {
   ShieldCheck,
   Sparkles,
   RotateCcw,
-  Globe,
   Monitor,
   CheckCircle2,
   ChevronDown,
@@ -26,8 +25,6 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
     currentUser,
     currentOrg,
     switchRole,
-    language,
-    setLanguage,
     deviceView,
     setDeviceView,
     resetDemoData,
@@ -45,6 +42,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
     userId: string;
     label: string;
     badge: string;
+    short: string;
     sublabel: string;
     icon: any;
     color: string;
@@ -54,6 +52,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
       userId: 'user-grace-owner',
       label: 'Grace N. (Owner)',
       badge: 'Business Owner',
+      short: 'Owner',
       sublabel: 'Bella Salon • Full Controls & Commercials',
       icon: Store,
       color: 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -63,6 +62,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
       userId: 'user-patrick-manager',
       label: 'Patrick M. (Manager)',
       badge: 'Business Manager',
+      short: 'Manager',
       sublabel: 'Daily Operations, Approvals & Team',
       icon: UserCheck,
       color: 'bg-blue-50 text-blue-700 border-blue-200'
@@ -72,7 +72,8 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
       userId: 'user-diane-staff',
       label: 'Diane K. (Counter Staff)',
       badge: 'Frontline Staff',
-      sublabel: 'Rapid Scan, Record Visits & Redeem',
+      short: 'Counter',
+      sublabel: 'Rapid Scan, Record Visits & Counter Service',
       icon: Smartphone,
       color: 'bg-amber-50 text-amber-700 border-amber-200'
     },
@@ -81,7 +82,8 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
       userId: 'user-amina-participant',
       label: 'Amina N. (Customer)',
       badge: 'Participant',
-      sublabel: 'Customer Mobile • 8/10 at Bella Salon',
+      short: 'Customer',
+      sublabel: 'Customer Mobile • Loyalty wallet',
       icon: Smartphone,
       color: 'bg-purple-50 text-purple-700 border-purple-200'
     },
@@ -90,6 +92,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
       userId: 'user-marcus-operator',
       label: 'Marcus T. (Operator)',
       badge: '11thONUS Operator',
+      short: 'Operator',
       sublabel: 'Platform Command, Health & Integrity',
       icon: ShieldCheck,
       color: 'bg-slate-900 text-white border-slate-700'
@@ -130,7 +133,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition active:scale-95"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-100" />
-            <span>Guided Tour (23 Steps)</span>
+            <span>Guided Tour (10 Steps)</span>
           </button>
         </div>
 
@@ -153,7 +156,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-amber-600' : 'text-slate-400'}`} />
                   <span className="hidden sm:inline">{item.badge}</span>
-                  <span className="sm:hidden">{item.badge.split(' ')[0]}</span>
+                  <span className="sm:hidden">{item.short}</span>
 
                   {/* Badges for pending items */}
                   {item.role === 'business_manager' && pendingApprovalsCount > 0 && (
@@ -195,15 +198,12 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
             </button>
           )}
 
-          {/* Language Switcher */}
-          <button
-            onClick={() => setLanguage(language === 'en' ? 'fr' : 'en')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-            title="Switch Language: English / Français"
-          >
-            <Globe className="w-3.5 h-3.5 text-slate-400" />
-            <span>{language.toUpperCase()}</span>
-          </button>
+          {/* Language selector intentionally hidden: the prototype experience is
+              currently assembled in English only and no product component
+              consumes language state, so no selector is shown. French
+              localisation remains a later production/experience-assembly
+              requirement. Underlying seams (AppLanguage, redemptionCopy,
+              market default-language metadata) are preserved. */}
 
           {/* Reset Demo Data */}
           <button

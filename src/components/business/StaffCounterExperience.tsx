@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   QrCode,
@@ -11,12 +11,32 @@ import {
   Clock,
   ArrowRight,
   ShieldAlert,
+  ShieldCheck,
   User,
   History,
   X,
-  Camera
+  Camera,
+  FlaskConical
 } from 'lucide-react';
 import { LoyaltyCircle } from '../common/LoyaltyCircle';
+import { REDEMPTION_COPY } from '../../data/redemptionCopy';
+
+type RedemptionScenarioId =
+  | 'authorised'
+  | 'staff-blocked'
+  | 'manager-revoked'
+  | 'participant-ready'
+  | 'after-redemption'
+  | 'already-redeemed';
+
+const REDEMPTION_SCENARIOS: { id: RedemptionScenarioId; label: string }[] = [
+  { id: 'authorised', label: '1 · Authorised confirm' },
+  { id: 'staff-blocked', label: '2 · Staff not authorised' },
+  { id: 'manager-revoked', label: '3 · Manager revoked' },
+  { id: 'participant-ready', label: '4 · Participant ready' },
+  { id: 'after-redemption', label: '5 · After redemption' },
+  { id: 'already-redeemed', label: '6 · Already redeemed' }
+];
 
 export const StaffCounterExperience: React.FC = () => {
   const {
@@ -29,7 +49,9 @@ export const StaffCounterExperience: React.FC = () => {
     completedRewards,
     recordQualifyingPurchase,
     redeemReward,
-    registerWalkInCustomer
+    registerWalkInCustomer,
+    hasRedemptionAuthority,
+    applyRedemptionScenario
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,10 +61,20 @@ export const StaffCounterExperience: React.FC = () => {
   const [notes, setNotes] = useState<string>('');
   const [showQrScannerModal, setShowQrScannerModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmSheet, setShowConfirmSheet] = useState(false);
+  const [showScenarios, setShowScenarios] = useState(false);
+  const [activeScenario, setActiveScenario] = useState<RedemptionScenarioId | null>(null);
   const [lastActionResult, setLastActionResult] = useState<{
-    type: 'purchase' | 'redemption' | 'pending';
+    type: 'purchase' | 'redemption' | 'pending' | 'blocked' | 'already';
     message: string;
     details?: string;
+  } | null>(null);
+  const [redemptionSuccess, setRedemptionSuccess] = useState<{
+    customerName: string;
+    firstName: string;
+    rewardTitle: string;
+    confirmerName: string;
+    nextCycle: number;
   } | null>(null);
 
   // Filter programmes for current org
@@ -77,6 +109,40 @@ export const StaffCounterExperience: React.FC = () => {
   const currentApprovedSteps = customerRelationship?.approvedSteps ?? 0;
   const currentPendingSteps = customerRelationship?.pendingSteps ?? 0;
   const currentCycle = customerRelationship?.currentCycle ?? 1;
+
+  // Permission-based authority (never title-based): the screen always
+  // reflects the viewer's *current* grant, including mid-session revocation.
+  const authority = hasRedemptionAuthority(currentUser.id);
+  const copy = REDEMPTION_COPY.en;
+
+  const firstName = selectedCustomer?.name.split(' ')[0] ?? 'Customer';
+  const rewardTitle = selectedProgramme
+    ? `11th ${selectedProgramme.qualifyingItemName}`
+    : '11th reward';
+
+  // Latest redeemed reward for this customer + programme (continuity + double-action guard).
+  const latestRedeemed = completedRewards
+    .filter(r => r.customerId === selectedCustomerId && r.programmeId === selectedProgramme?.id && r.status === 'redeemed')
+    .sort((a, b) => (b.redeemedAt ?? '').localeCompare(a.redeemedAt ?? ''))[0];
+  // Fresh-cycle continuity strip: the new 0/10 cycle stays actionable; the
+  // strip records that the previous reward was already redeemed (and by whom).
+  const showRedeemedStrip =
+    !hasRewardAvailable && !redemptionSuccess && (customerRelationship?.totalRedeemedRewards ?? 0) > 0 && currentApprovedSteps === 0;
+
+  // Review-flow guard: never show a stale success/confirm state after the
+  // underlying data changed (scenario switch, customer change, authority
+  // change). The panel always reflects the current earning position.
+  useEffect(() => {
+    setRedemptionSuccess(null);
+    setShowConfirmSheet(false);
+  }, [selectedCustomerId, selectedProgrammeId, currentUser.id]);
+  useEffect(() => {
+    if (hasRewardAvailable) {
+      setRedemptionSuccess(null);
+      setLastActionResult(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRewardAvailable]);
 
   // Recent transactions at this counter
   const todayTransactions = transactions
@@ -134,11 +200,47 @@ export const StaffCounterExperience: React.FC = () => {
       });
 
       if (res.success) {
-        setLastActionResult({
-          type: 'redemption',
-          message: `Reward Redeemed Successfully!`,
-          details: `11th ${selectedProgramme.qualifyingItemName} provided on ${currentOrg.name}. Cycle #${currentCycle + 1} has begun!`
+        setRedemptionSuccess({
+          customerName: selectedCustomer.name,
+          firstName: selectedCustomer.name.split(' ')[0],
+          rewardTitle: `11th ${selectedProgramme.qualifyingItemName}`,
+          confirmerName: currentUser.name,
+          nextCycle: currentCycle + 1
         });
+        setLastActionResult(null);
+        setShowConfirmSheet(false);
+      } else if (res.reason === 'already_redeemed') {
+        setLastActionResult({
+          type: 'already',
+          message: copy.alreadyRedeemed,
+          details: latestRedeemed?.redeemedByStaffName
+            ? `Confirmed by ${latestRedeemed.redeemedByStaffName}. No second redemption was created.`
+            : 'No second redemption was created.'
+        });
+        setShowConfirmSheet(false);
+      } else if (res.reason === 'revoked' || res.reason === 'suspended') {
+        setLastActionResult({
+          type: 'blocked',
+          message: res.reason === 'suspended'
+            ? 'This account is suspended and cannot confirm rewards.'
+            : copy.authorityRevoked,
+          details: 'The screen reflects your current authority — a stale screen cannot redeem.'
+        });
+        setShowConfirmSheet(false);
+      } else if (res.reason === 'unauthorised') {
+        setLastActionResult({
+          type: 'blocked',
+          message: copy.needsAuthorisedMember,
+          details: 'Reward status stays visible so you can serve the customer while you fetch help.'
+        });
+        setShowConfirmSheet(false);
+      } else {
+        setLastActionResult({
+          type: 'blocked',
+          message: res.message,
+          details: undefined
+        });
+        setShowConfirmSheet(false);
       }
 
       setIsSubmitting(false);
@@ -176,6 +278,43 @@ export const StaffCounterExperience: React.FC = () => {
         </button>
       </div>
 
+      {/* Prototype review controls — collapsed by default, never product UI */}
+      <div className="bg-white rounded-xl border border-dashed border-slate-300 px-3 py-2 shadow-xs">
+        <button
+          onClick={() => setShowScenarios(v => !v)}
+          className="w-full flex items-center justify-between text-xs font-semibold text-slate-600 min-h-[36px]"
+        >
+            <span className="flex items-center gap-1.5">
+              <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
+              <span>Prototype review controls{activeScenario ? ` · ${REDEMPTION_SCENARIOS.find(s => s.id === activeScenario)?.label}` : ''}</span>
+            </span>
+          <span className="text-slate-400">{showScenarios ? '▾' : '▸'}</span>
+        </button>
+        {showScenarios && (
+          <div className="flex flex-wrap gap-1.5 pb-1.5">
+            {REDEMPTION_SCENARIOS.map(s => (
+              <button
+                key={s.id}
+                onClick={() => {
+                  setActiveScenario(s.id);
+                  setRedemptionSuccess(null);
+                  setLastActionResult(null);
+                  setShowConfirmSheet(false);
+                  applyRedemptionScenario(s.id);
+                }}
+                className={`px-2.5 py-1.5 min-h-[36px] rounded-lg text-[11px] font-semibold border transition ${
+                  activeScenario === s.id
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Main Counter Interaction Grid */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         {/* Left Column: Customer Identification & Selector */}
@@ -184,6 +323,9 @@ export const StaffCounterExperience: React.FC = () => {
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
               1. Identify Customer
             </label>
+            <p className="text-[11px] text-slate-400 mb-2">
+              Scan the customer's 11thONUS code or search — identity lookup only.
+            </p>
 
             {/* Quick Search */}
             <div className="relative mb-3">
@@ -204,15 +346,18 @@ export const StaffCounterExperience: React.FC = () => {
                   <p className="text-xs text-slate-500">
                     No customer matches "{searchQuery}"
                   </p>
+                  <p className="text-[11px] text-slate-400">
+                    New here? Registration is secondary — only for genuine walk-ins.
+                  </p>
                   <button
                     onClick={() => {
                       setNewCustomerName(searchQuery);
                       setShowQuickAddModal(true);
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Register Walk-in Customer</span>
+                    <span>Register walk-in (secondary)</span>
                   </button>
                 </div>
               ) : (
@@ -228,6 +373,8 @@ export const StaffCounterExperience: React.FC = () => {
                       onClick={() => {
                         setSelectedCustomerId(participant.id);
                         setLastActionResult(null);
+                        setRedemptionSuccess(null);
+                        setShowConfirmSheet(false);
                         setAllowPurchaseOverride(false);
                       }}
                       className={`w-full text-left p-2.5 rounded-lg transition border flex items-center justify-between ${
@@ -359,10 +506,16 @@ export const StaffCounterExperience: React.FC = () => {
                       ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                       : lastActionResult.type === 'pending'
                       ? 'bg-amber-50 border-amber-200 text-amber-900'
+                      : lastActionResult.type === 'blocked' || lastActionResult.type === 'already'
+                      ? 'bg-slate-100 border-slate-300 text-slate-800'
                       : 'bg-amber-50/90 border-amber-300 text-amber-950'
                   }`}
                 >
-                  <Sparkles className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  {lastActionResult.type === 'blocked' || lastActionResult.type === 'already' ? (
+                    <ShieldAlert className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  )}
                   <div>
                     <span className="font-bold block">{lastActionResult.message}</span>
                     {lastActionResult.details && (
@@ -387,47 +540,111 @@ export const StaffCounterExperience: React.FC = () => {
                 />
               </div>
 
-              {/* IF REWARD AVAILABLE: Prominent 1-Click Redemption */}
-              {hasRewardAvailable && !allowPurchaseOverride ? (
+              {/* STEP E — SUCCESS: slim hierarchy, natural language */}
+              {redemptionSuccess ? (
+                <div className="p-5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/20 space-y-2.5 text-center">
+                  <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="font-bold text-lg leading-tight">{copy.successTitle}</h3>
+                  <p className="text-sm text-emerald-50">
+                    {redemptionSuccess.firstName}'s {redemptionSuccess.rewardTitle} {copy.successConfirmedLine}
+                    <span className="block text-xs text-emerald-100 mt-1">
+                      Confirmed by {redemptionSuccess.confirmerName} · {redemptionSuccess.firstName} {copy.successNextLine}
+                    </span>
+                  </p>
+                  <div className="flex items-center justify-center gap-2 text-sm font-bold bg-black/15 rounded-lg py-2.5">
+                    <span className="px-2 py-0.5 rounded bg-white/25 font-mono">0 / 10</span>
+                    <span className="text-xs font-semibold">{copy.nextProgressLabel}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setRedemptionSuccess(null);
+                      setSelectedCustomerId(selectedCustomer.id);
+                    }}
+                    className="w-full py-3 min-h-[48px] bg-white hover:bg-emerald-50 text-emerald-900 text-sm font-bold rounded-lg shadow-sm transition active:scale-[0.98]"
+                  >
+                    {copy.serveNext}
+                  </button>
+                </div>
+              ) : hasRewardAvailable && !allowPurchaseOverride ? (
                 <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Gift className="w-5 h-5 text-amber-200 animate-pulse" />
-                      <span className="font-bold text-sm uppercase tracking-wide">
-                        11th ON US Available!
-                      </span>
-                    </div>
-                    <span className="text-xs bg-white/20 px-2 py-0.5 rounded font-mono font-semibold">
-                      {customerRelationship?.rewardCode || 'ONUS-READY'}
+                  <div className="flex items-center gap-2">
+                    <Gift className="w-5 h-5 text-amber-200 animate-pulse" />
+                    <span className="font-bold text-sm uppercase tracking-wide">
+                      {copy.rewardReadyEyebrow}
                     </span>
                   </div>
 
+                  <h3 className="text-lg font-bold leading-snug">
+                    {firstName}'s {rewardTitle} is ready.
+                  </h3>
                   <p className="text-xs text-amber-100">
-                    {selectedCustomer.name} has completed 10 qualifying visits. This {selectedProgramme.qualifyingItemName} is on {currentOrg.name}.
+                    {selectedCustomer.name} completed 10 qualifying visits. The {selectedProgramme.qualifyingItemName} being provided is on {currentOrg.name}.
                   </p>
 
-                  <button
-                    onClick={handleRedeem}
-                    disabled={isSubmitting}
-                    className="w-full py-3 bg-white hover:bg-slate-50 text-amber-900 text-sm font-bold rounded-lg shadow-sm transition active:scale-98 flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4 text-amber-600" />
-                    <span>Redeem 11th Reward Now</span>
-                  </button>
+                  {authority.authorised ? (
+                    <button
+                      onClick={() => setShowConfirmSheet(true)}
+                      disabled={isSubmitting}
+                      className="w-full py-3.5 min-h-[52px] bg-white hover:bg-slate-50 text-amber-900 text-base font-bold rounded-lg shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-5 h-5 text-amber-600" />
+                      <span>{copy.confirmAction}</span>
+                    </button>
+                  ) : authority.status === 'revoked' || authority.status === 'suspended' ? (
+                    <div className="space-y-2">
+                      <button
+                        disabled
+                        className="w-full py-3.5 min-h-[52px] bg-white/40 text-white text-base font-bold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed"
+                      >
+                        <ShieldAlert className="w-5 h-5" />
+                        <span>{copy.confirmAction}</span>
+                      </button>
+                      <p className="text-xs font-semibold bg-black/20 rounded-lg p-2.5">
+                        {authority.status === 'suspended'
+                          ? 'This account is suspended and cannot confirm rewards.'
+                          : copy.authorityRevoked}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <button
+                        disabled
+                        className="w-full py-3.5 min-h-[52px] bg-white/40 text-white text-base font-bold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed"
+                      >
+                        <ShieldAlert className="w-5 h-5" />
+                        <span>{copy.confirmAction}</span>
+                      </button>
+                      <p className="text-xs font-semibold bg-black/20 rounded-lg p-2.5">
+                        {copy.needsAuthorisedMember}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="pt-2 border-t border-white/20 flex items-center justify-between text-[11px]">
                     <span className="text-amber-200">Customer paying for another visit today?</span>
                     <button
                       onClick={() => setAllowPurchaseOverride(true)}
-                      className="underline font-semibold text-white hover:text-amber-100"
+                      className="underline font-semibold text-white hover:text-amber-100 min-h-[32px] px-1 whitespace-nowrap"
                     >
-                      Record purchase instead
+                      {copy.recordInstead}
                     </button>
                   </div>
                 </div>
               ) : (
                 /* NORMAL ACTION: Record Qualifying Purchase */
                 <div className="space-y-4 pt-2">
+                  {showRedeemedStrip && (
+                    <div className="p-2.5 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-700 flex items-start gap-2">
+                      <ShieldCheck className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                      <span>
+                        <span className="font-bold">{copy.alreadyRedeemed}</span>{' '}
+                        {latestRedeemed?.redeemedByStaffName ? `Confirmed by ${latestRedeemed.redeemedByStaffName}. ` : ''}
+                        New earning cycle in progress — record visits normally.
+                      </span>
+                    </div>
+                  )}
                   {hasRewardAvailable && allowPurchaseOverride && (
                     <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 flex items-center justify-between">
                       <span className="font-medium">
@@ -585,6 +802,55 @@ export const StaffCounterExperience: React.FC = () => {
         </div>
       </div>
 
+      {/* STEP D — Explicit confirmation sheet (no customer PIN/OTP/approval) */}
+      {showConfirmSheet && selectedCustomer && selectedProgramme && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-200 space-y-4">
+            <div className="text-center space-y-1">
+              <div className="w-11 h-11 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+                <Gift className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-base text-slate-900">{copy.confirmSheetTitle}</h3>
+              <p className="text-xs text-slate-500">
+                {copy.confirmSheetHelp}
+              </p>
+            </div>
+
+            <dl className="text-xs divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+              <div className="flex justify-between px-3 py-2 bg-slate-50/60">
+                <dt className="text-slate-500">Customer</dt>
+                <dd className="font-bold text-slate-900">{selectedCustomer.name}</dd>
+              </div>
+              <div className="flex justify-between px-3 py-2">
+                <dt className="text-slate-500">Reward</dt>
+                <dd className="font-bold text-slate-900 text-right">{rewardTitle} · {currentOrg.name}</dd>
+              </div>
+              <div className="flex justify-between px-3 py-2 bg-slate-50/60">
+                <dt className="text-slate-500">Confirmed by</dt>
+                <dd className="font-bold text-slate-900">{currentUser.name} (you)</dd>
+              </div>
+            </dl>
+
+            <div className="space-y-2">
+              <button
+                onClick={handleRedeem}
+                disabled={isSubmitting}
+                className="w-full py-3.5 min-h-[52px] bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-base font-bold rounded-xl shadow-sm transition active:scale-[0.98]"
+              >
+                {isSubmitting ? 'Confirming…' : copy.confirmAction}
+              </button>
+              <button
+                onClick={() => setShowConfirmSheet(false)}
+                disabled={isSubmitting}
+                className="w-full py-3 min-h-[48px] bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Simulated QR Code Camera Scanner Modal */}
       {showQrScannerModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -611,24 +877,30 @@ export const StaffCounterExperience: React.FC = () => {
                 <QrCode className="w-24 h-24 text-white/30" />
               </div>
               <p className="text-white/80 text-xs mt-3">
-                Align customer's 11thONUS QR code in frame
+                Align the customer's 11thONUS code — identity lookup only. Reward availability is resolved by the platform, not the code.
               </p>
             </div>
 
             {/* Quick Simulate Scan Buttons */}
             <div className="space-y-1.5">
               <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-                Simulate Scan Identified Member:
+                Simulate identity lookup:
               </span>
               <button
                 onClick={() => {
                   setSelectedCustomerId('user-amina-participant');
+                  setRedemptionSuccess(null);
+                  setLastActionResult(null);
                   setShowQrScannerModal(false);
                 }}
-                className="w-full py-2 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold text-left flex items-center justify-between border border-amber-200"
+                className="w-full py-2 px-3 min-h-[44px] rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold text-left flex items-center justify-between border border-amber-200"
               >
                 <span>Amina Niyonsaba (ONUS-8821-AMINA)</span>
-                <span className="text-[10px] text-amber-700 font-bold">8 of 10</span>
+                <span className="text-[10px] text-amber-700 font-bold">
+                  {relationships.find(r => r.customerId === 'user-amina-participant' && r.orgId === currentOrg.id)?.rewardAvailable
+                    ? 'Reward ready'
+                    : `${relationships.find(r => r.customerId === 'user-amina-participant' && r.orgId === currentOrg.id)?.approvedSteps ?? '–'} of 10`}
+                </span>
               </button>
 
               <button

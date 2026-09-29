@@ -17,6 +17,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { LoyaltyCircle } from '../common/LoyaltyCircle';
+import { REDEMPTION_COPY } from '../../data/redemptionCopy';
 
 export const ParticipantExperience: React.FC = () => {
   const {
@@ -26,7 +27,9 @@ export const ParticipantExperience: React.FC = () => {
     relationships,
     transactions,
     completedRewards,
-    joinProgrammeAsParticipant
+    joinProgrammeAsParticipant,
+    participantSeesConfirmer,
+    showToast
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'home' | 'programmes' | 'activity' | 'profile'>('home');
@@ -46,6 +49,23 @@ export const ParticipantExperience: React.FC = () => {
 
   // Transactions for this participant
   const myTransactions = transactions.filter(t => t.customerId === currentUser.id);
+
+  // Redeemed history + fresh earning state (post-redemption continuity).
+  const myRedeemedRewards = completedRewards
+    .filter(r => r.customerId === currentUser.id && r.status === 'redeemed')
+    .sort((a, b) => (b.redeemedAt ?? '').localeCompare(a.redeemedAt ?? ''));
+  const latestRedemption = myRedeemedRewards[0];
+
+  // Slim acknowledgement: the latest redemption's circle is already fresh
+  // (0/10, no pending reward) — shown even while another reward is pending
+  // elsewhere so the "reward enjoyed" moment is never lost.
+  const showRedeemedAck =
+    !!latestRedemption &&
+    myRelationships.some(
+      r => r.programmeId === latestRedemption.programmeId && !r.rewardAvailable && r.approvedSteps === 0
+    );
+
+  const copy = REDEMPTION_COPY.en;
 
   // Notifications simulation
   const notifications = [
@@ -68,42 +88,56 @@ export const ParticipantExperience: React.FC = () => {
   return (
     <div className="max-w-md mx-auto space-y-5 pb-16">
       {/* Mobile-Friendly App Header */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
             {currentUser.initials}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="text-[11px] text-slate-400 font-medium">11thONUS Member</div>
-            <h1 className="text-base font-bold text-slate-900 leading-tight">
+            <h1 className="text-[13px] font-bold text-slate-900 leading-tight truncate">
               {currentUser.name}
             </h1>
           </div>
         </div>
 
-        {/* Permanent Primary Action: "Show My Code" */}
+        {/* Permanent Primary Action: identity code (lookup, not a voucher) */}
         <button
           onClick={() => setShowQrModal(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900 text-white text-xs font-bold shadow-xs hover:bg-slate-800 transition active:scale-95"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-full bg-slate-900 text-white text-[11px] font-bold shadow-xs hover:bg-slate-800 transition active:scale-95 whitespace-nowrap"
         >
           <QrCode className="w-3.5 h-3.5 text-amber-400" />
-          <span>Show Code</span>
+          <span className="max-[410px]:hidden">{copy.participantCodeCta}</span>
+          <span className="min-[411px]:hidden">My 11thONUS code</span>
         </button>
       </div>
+
+      {/* Slim post-redemption acknowledgement (privacy-aware) */}
+      {showRedeemedAck && latestRedemption && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl px-4 py-2.5 text-xs font-semibold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>
+            {latestRedemption.orgName} {copy.participantRedeemedAck}
+            {participantSeesConfirmer && latestRedemption.redeemedByStaffName
+              ? ` Confirmed by ${latestRedemption.redeemedByStaffName}.`
+              : ''}
+          </span>
+        </div>
+      )}
 
       {/* Main Tab Views */}
       {activeTab === 'home' && (
         <div className="space-y-4">
-          {/* PRIORITY 1: REWARD AVAILABLE BANNER - EMOTIONAL PAYOFF (Section 8) */}
+          {/* PRIORITY 1: REWARD AVAILABLE BANNER — identity + Business confirmation */}
           {rewardAvailableRel && (
             <div className="bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 text-white rounded-2xl p-5 shadow-lg shadow-amber-500/20 space-y-3 relative overflow-hidden">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider bg-white/20 px-2.5 py-0.5 rounded-full text-amber-100">
                   <Sparkles className="w-3.5 h-3.5 text-amber-200" />
                   Circle Completed!
                 </span>
-                <span className="text-xs font-mono font-bold bg-black/20 px-2.5 py-0.5 rounded">
-                  {rewardAvailableRel.rewardCode || 'ONUS-FREE'}
+                <span className="text-[11px] font-semibold text-amber-100">
+                  {organisations.find(o => o.id === rewardAvailableRel.orgId)?.name}
                 </span>
               </div>
 
@@ -112,17 +146,17 @@ export const ParticipantExperience: React.FC = () => {
                   Your 11th {programmes.find(p => p.id === rewardAvailableRel.programmeId)?.qualifyingItemName || 'Visit'} is on {organisations.find(o => o.id === rewardAvailableRel.orgId)?.name}!
                 </h2>
                 <p className="text-xs text-amber-100 mt-1">
-                  You completed 10 qualifying visits. Present your code at the counter to redeem your reward.
+                  You completed 10 qualifying visits. {copy.participantCodeHelp}
                 </p>
               </div>
 
-              <div className="pt-2 flex items-center justify-between">
+              <div className="pt-2 flex items-center justify-between gap-2">
                 <button
                   onClick={() => setShowQrModal(true)}
-                  className="px-4 py-2 rounded-xl bg-white text-amber-950 font-bold text-xs shadow-sm hover:bg-slate-50 transition active:scale-98 flex items-center gap-1.5"
+                  className="px-4 py-2.5 min-h-[44px] rounded-xl bg-white text-amber-950 font-bold text-xs shadow-sm hover:bg-slate-50 transition active:scale-98 flex items-center gap-1.5"
                 >
                   <Gift className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Show Code to Redeem</span>
+                  <span>{copy.participantCodeCta}</span>
                 </button>
                 <span className="text-[11px] font-semibold text-amber-200">
                   Cycle #{rewardAvailableRel.currentCycle} Complete ✓
@@ -131,8 +165,32 @@ export const ParticipantExperience: React.FC = () => {
             </div>
           )}
 
-          {/* PRIORITY 2: CLOSEST TO REWARD SHOWCASE */}
-          {closestToRewardRel ? (
+          {/* POST-REDEMPTION CONTINUITY: redeemed acknowledgement + fresh cycle */}
+          {!rewardAvailableRel && latestRedemption && (
+            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-2xl p-5 shadow-lg shadow-emerald-500/20 space-y-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-emerald-100">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Reward redeemed</span>
+              </div>
+              <div>
+                <h2 className="text-lg font-bold font-display leading-tight">
+                  {copy.successTitle}
+                </h2>
+                <p className="text-xs text-emerald-50 mt-1">
+                  Your {latestRedemption.rewardTitle} was confirmed at {latestRedemption.orgName}
+                  {participantSeesConfirmer && latestRedemption.redeemedByStaffName ? ` by ${latestRedemption.redeemedByStaffName}` : ''}. Your next 10 starts now — keep earning.
+                </p>
+              </div>
+              {myRedeemedRewards.length > 1 && (
+                <p className="text-[11px] text-emerald-100">
+                  {myRedeemedRewards.length} rewards redeemed so far — full history below.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* PRIORITY 2: CLOSEST TO REWARD SHOWCASE (hidden while a reward is ready) */}
+          {!rewardAvailableRel && closestToRewardRel ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -288,6 +346,37 @@ export const ParticipantExperience: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* REWARD HISTORY (post-redemption continuity) */}
+          {myRedeemedRewards.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Reward history ({myRedeemedRewards.length})
+              </h2>
+              <div className="divide-y divide-slate-100">
+                {myRedeemedRewards.slice(0, 3).map(rew => (
+                  <div key={rew.id} className="py-2.5 flex items-center justify-between text-xs gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                        <Gift className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900">{rew.rewardTitle}</div>
+                        <div className="text-[11px] text-slate-500">
+                          {rew.orgName}
+                          {rew.redeemedAt ? ` • ${new Date(rew.redeemedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}
+                          {participantSeesConfirmer && rew.redeemedByStaffName ? ` • confirmed by ${rew.redeemedByStaffName}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                      Redeemed
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -377,7 +466,7 @@ export const ParticipantExperience: React.FC = () => {
                         : `${tx.quantity} Qualifying Purchase Recorded`}
                     </div>
                     <div className="text-[11px] text-slate-500">
-                      {organisations.find(o => o.id === tx.orgId)?.name} • Staff: {tx.staffName}
+                      {organisations.find(o => o.id === tx.orgId)?.name} • {tx.type === 'reward_redemption' && !participantSeesConfirmer ? 'Confirmed in store' : `Staff: ${tx.staffName}`}
                     </div>
                     {tx.pendingReason && (
                       <div className="text-[11px] text-amber-700 mt-0.5">
@@ -521,7 +610,7 @@ export const ParticipantExperience: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-500 leading-tight">
-              Present this code at any participating business counter to record your visit or claim rewards.
+              This is your 11thONUS identity — it lets the Business find you. {copy.participantCodeHelp}
             </p>
           </div>
         </div>
@@ -607,12 +696,18 @@ export const ParticipantExperience: React.FC = () => {
                     if (!joinCode.trim()) return;
                     const matched = programmes.find(
                       p => p.name.toLowerCase().includes(joinCode.toLowerCase()) || p.id.includes(joinCode.toLowerCase())
-                    ) || programmes[0];
+                    );
                     if (matched) {
                       joinProgrammeAsParticipant(matched.id);
+                      setShowJoinModal(false);
+                      setJoinCode('');
+                    } else {
+                      showToast({
+                        title: 'No business found for that code',
+                        description: 'Check the code with the business, or join from the list above.',
+                        type: 'info'
+                      });
                     }
-                    setShowJoinModal(false);
-                    setJoinCode('');
                   }}
                   className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg transition text-xs"
                 >

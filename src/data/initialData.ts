@@ -27,12 +27,18 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     status: 'active',
     logoText: 'BS',
     primaryContact: 'Grace Ndayishimiye',
-    trialCirclesRemaining: 18,
+    trialCirclesRemaining: 0,
     completedBillableCircles: 32,
     creditBalanceUSD: 45.0,
     lowCreditAlert: false,
     gracePeriodActive: false,
-    createdAt: '2026-03-12'
+    createdAt: '2026-03-12',
+    onboardingState: 'commercially_active',
+    trialAllowanceTotal: 5,
+    commercialStanding: 'paid_active',
+    paidActive: true,
+    paidActivatedAt: '2026-05-02T10:00:00Z',
+    paidActivationRef: 'OFFLINE-CONF-2026-051'
   },
   {
     id: 'org-joes-coffee',
@@ -44,15 +50,19 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     phone: '+250 788 345 678',
     email: 'hello@joescoffee.rw',
     currency: 'RWF',
-    status: 'active',
+    status: 'trial',
     logoText: 'JC',
     primaryContact: 'Joseph Kamanzi',
-    trialCirclesRemaining: 4,
+    trialCirclesRemaining: 1,
     completedBillableCircles: 86,
     creditBalanceUSD: 12.0,
     lowCreditAlert: false,
     gracePeriodActive: false,
-    createdAt: '2026-01-20'
+    createdAt: '2026-01-20',
+    onboardingState: 'trial_ready',
+    trialAllowanceTotal: 5,
+    commercialStanding: 'trial',
+    paidActive: false
   },
   {
     id: 'org-sparkle-wash',
@@ -64,15 +74,20 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     phone: '+257 79 98 12 34',
     email: 'sparkle@wash.bi',
     currency: 'BIF',
-    status: 'active',
+    status: 'restricted',
     logoText: 'SW',
     primaryContact: 'Christian Bizimana',
     trialCirclesRemaining: 0,
     completedBillableCircles: 14,
-    creditBalanceUSD: 3.0,
+    creditBalanceUSD: 0.0,
     lowCreditAlert: true,
     gracePeriodActive: true,
-    createdAt: '2026-05-18'
+    createdAt: '2026-05-18',
+    onboardingState: 'trial_ready',
+    trialAllowanceTotal: 5,
+    commercialStanding: 'grace',
+    paidActive: false,
+    operatorNote: 'Zero credit: new starts blocked. Active circles may finish; earned rewards remain redeemable; loyalty history intact.'
   },
   {
     id: 'org-kivu-bistro',
@@ -87,12 +102,16 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     status: 'onboarding',
     logoText: 'KB',
     primaryContact: 'Alain Mugabe',
-    trialCirclesRemaining: 50,
+    trialCirclesRemaining: 0,
     completedBillableCircles: 0,
     creditBalanceUSD: 0.0,
     lowCreditAlert: false,
     gracePeriodActive: false,
-    createdAt: '2026-09-14'
+    createdAt: '2026-09-14',
+    onboardingState: 'ready',
+    trialAllowanceTotal: 5,
+    commercialStanding: 'trial',
+    paidActive: false
   }
 ];
 
@@ -230,7 +249,8 @@ export const INITIAL_USERS: User[] = [
     orgId: 'org-bella-salon',
     initials: 'GN',
     title: 'Founder & Owner',
-    active: true
+    active: true,
+    redemptionAuthority: 'authorised'
   },
   {
     id: 'user-patrick-manager',
@@ -241,7 +261,8 @@ export const INITIAL_USERS: User[] = [
     orgId: 'org-bella-salon',
     initials: 'PM',
     title: 'Salon Operations Manager',
-    active: true
+    active: true,
+    redemptionAuthority: 'authorised'
   },
   {
     id: 'user-diane-staff',
@@ -252,7 +273,8 @@ export const INITIAL_USERS: User[] = [
     orgId: 'org-bella-salon',
     initials: 'DK',
     title: 'Senior Stylist & Frontline',
-    active: true
+    active: true,
+    redemptionAuthority: 'none'
   },
   // Participant
   {
@@ -299,7 +321,8 @@ export const INITIAL_USERS: User[] = [
     operatorRole: 'platform_admin',
     initials: 'MT',
     title: 'Platform Lead & Trust Architect',
-    active: true
+    active: true,
+    redemptionAuthority: 'none'
   }
 ];
 
@@ -524,6 +547,19 @@ export const INITIAL_APPROVAL_ITEMS: ApprovalItem[] = [
 
 export const INITIAL_INTEGRITY_CASES: IntegrityCase[] = [
   {
+    id: 'int-042',
+    caseNumber: 'FLG-2026-042',
+    orgId: 'org-joes-coffee',
+    orgName: "Joe's Coffee",
+    flagType: 'unusual_quantity',
+    reason: 'Single receipt logged 4 Large Cappuccinos above the 3-unit approval threshold pattern.',
+    evidence: 'Transaction tx-review-042: 4 units in one visit by Barista Eric on Sept 16th.',
+    status: 'open',
+    priority: 'medium',
+    assignedOperator: 'Platform Administrator',
+    createdAt: '2026-09-16T10:00:00Z'
+  },
+  {
     id: 'int-041',
     caseNumber: 'FLG-2026-041',
     orgId: 'org-sparkle-wash',
@@ -556,6 +592,37 @@ export const INITIAL_INTEGRITY_CASES: IntegrityCase[] = [
 ];
 
 export const INITIAL_SUPPORT_CASES: SupportCase[] = [
+  {
+    id: 'sup-106',
+    caseNumber: 'SUP-8804',
+    requesterName: 'Alain Mugabe',
+    requesterRole: 'business',
+    category: 'setup_issue',
+    priority: 'high',
+    status: 'open',
+    assignedOperator: 'Platform Administrator',
+    createdAt: '2026-09-18T09:00:00Z',
+    title: 'Onboarding ready — request trial activation',
+    description: 'Kivu Fresh Bistro completed onboarding checklist and requests trial activation before first service.',
+    linkedOrgId: 'org-kivu-bistro',
+    linkedOrgName: 'Kivu Fresh Bistro'
+  },
+  {
+    id: 'sup-105',
+    caseNumber: 'SUP-8803',
+    requesterName: 'Christian Bizimana',
+    requesterRole: 'business',
+    category: 'billing_query',
+    priority: 'high',
+    status: 'investigating',
+    assignedOperator: 'Platform Administrator',
+    createdAt: '2026-09-17T11:00:00Z',
+    title: 'Zero credit — new starts blocked at Sparkle',
+    description: 'Car wash reports new customer circles cannot start. Asks how to restore standing after offline payment.',
+    linkedOrgId: 'org-sparkle-wash',
+    linkedOrgName: 'Sparkle Car Wash',
+    investigationNotes: 'Confirmed grace state: active circles continue, earned rewards redeemable, new starts blocked at zero credit.'
+  },
   {
     id: 'sup-104',
     caseNumber: 'SUP-8802',
@@ -624,6 +691,18 @@ export const INITIAL_COMMERCIAL_RECORDS: CommercialRecord[] = [
 
 export const INITIAL_AUDIT_LOG: AuditLogEntry[] = [
   {
+    id: 'aud-000',
+    actorName: 'Platform Administrator',
+    actorRole: 'Platform Administrator',
+    action: 'PAID_SERVICE_MANUALLY_ACTIVATED',
+    targetType: 'Organisation',
+    targetId: 'org-bella-salon',
+    reason: 'Offline payment confirmed. Ref OFFLINE-CONF-2026-051. Paid service activated.',
+    timestamp: '2026-05-02T10:00:00Z',
+    previousState: 'commercialStanding: trial',
+    newState: 'commercialStanding: paid_active'
+  },
+  {
     id: 'aud-001',
     actorName: 'Marcus Touré',
     actorRole: 'Platform Administrator',
@@ -675,23 +754,5 @@ export const INITIAL_MARKETS: MarketConfig[] = [
     defaultLanguage: 'en',
     activeBusinessesCount: 38,
     status: 'active'
-  },
-  {
-    id: 'mkt-cd',
-    country: 'DR Congo (East)',
-    code: 'COD',
-    currency: 'USD',
-    defaultLanguage: 'fr',
-    activeBusinessesCount: 8,
-    status: 'beta'
-  },
-  {
-    id: 'mkt-tz',
-    country: 'Tanzania',
-    code: 'TZA',
-    currency: 'TZS',
-    defaultLanguage: 'en',
-    activeBusinessesCount: 0,
-    status: 'planned'
   }
 ];

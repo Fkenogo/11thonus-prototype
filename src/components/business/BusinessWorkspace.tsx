@@ -28,8 +28,54 @@ import {
   Calendar
 } from 'lucide-react';
 import { LoyaltyCircle } from '../common/LoyaltyCircle';
-import { UserRole, ProgrammeStatus, ParticipantRelationship } from '../../types';
+import { UserRole, ProgrammeStatus, ParticipantRelationship, Organisation } from '../../types';
 import { MobileNavigation } from './MobileNavigation';
+
+/**
+ * Business-facing commercial standing notice (informational only).
+ * Derives from the SAME underlying state the Operator Console uses —
+ * no separate Business interpretation, no new state machine, and no
+ * Administrator capabilities. Healthy businesses render nothing.
+ */
+const CommercialStandingNotice: React.FC<{ org: Organisation }> = ({ org }) => {
+  const isRestricted =
+    org.status === 'restricted' ||
+    org.status === 'suspended' ||
+    org.commercialStanding === 'restricted' ||
+    org.commercialStanding === 'suspended';
+  const isGraceOnly = !isRestricted && org.gracePeriodActive;
+
+  if (isRestricted) {
+    return (
+      <div className="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/60 shadow-xs space-y-2">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <h2 className="text-sm font-bold text-slate-900 leading-tight">New loyalty circles are paused</h2>
+        </div>
+        <ul className="text-xs text-amber-950 space-y-1 list-disc pl-5">
+          <li>New circles can&apos;t start right now — there is no usable commercial balance.</li>
+          <li>Circles already in progress can still finish{org.gracePeriodActive ? ' (grace is active, but grace does not create new commercial capacity)' : ''}.</li>
+          <li>Customers&apos; earned rewards remain available and redeemable — nothing is cancelled and loyalty history stays intact.</li>
+          <li>To start new circles again, add commercial balance or contact 11thONUS support.</li>
+        </ul>
+      </div>
+    );
+  }
+
+  if (isGraceOnly) {
+    return (
+      <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs text-blue-950 flex items-start gap-2">
+        <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+        <div>
+          <strong>Existing circles can still finish. </strong>
+          Grace preserves circles already in progress and their earned rewards, but does not create new commercial capacity — starting new circles needs usable commercial balance. Add balance or contact 11thONUS support.
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
 
 export const BusinessWorkspace: React.FC = () => {
   const {
@@ -57,7 +103,9 @@ export const BusinessWorkspace: React.FC = () => {
     topUpCommercialBalance,
     createOrganisation,
     switchOrganisation,
-    switchRole
+    switchRole,
+    hasRedemptionAuthority,
+    setRedemptionAuthority
   } = useApp();
 
   const isOwner = activeRole === 'business_owner';
@@ -144,14 +192,27 @@ export const BusinessWorkspace: React.FC = () => {
   const [actionCustomerRel, setActionCustomerRel] = useState<ParticipantRelationship | null>(null);
   const [actionUnits, setActionUnits] = useState(1);
   const [actionNotes, setActionNotes] = useState('');
+  const [actionBlockedMsg, setActionBlockedMsg] = useState<string | null>(null);
 
   const handleRecordActionSubmit = () => {
     if (!actionCustomerRel) return;
     if (actionCustomerRel.rewardAvailable) {
-      redeemReward({
+      const res = redeemReward({
         programmeId: actionCustomerRel.programmeId,
         customerId: actionCustomerRel.customerId
       });
+      if (!res.success) {
+        // Keep the modal open on a safe state — never a silent no-op.
+        setActionBlockedMsg(
+          res.reason === 'already_redeemed'
+            ? 'This reward has already been redeemed. No second redemption was created.'
+            : res.reason === 'revoked' || res.reason === 'suspended'
+            ? 'You no longer have permission to confirm this reward. Ask an authorised team member.'
+            : 'A manager or authorised team member needs to confirm this reward.'
+        );
+        return;
+      }
+      setActionBlockedMsg(null);
       setActionCustomerRel(null);
       return;
     }
@@ -321,6 +382,8 @@ export const BusinessWorkspace: React.FC = () => {
         <div className="space-y-6">
           {/* ================= MOBILE-FIRST DASHBOARD STACK (md:hidden) ================= */}
           <div className="md:hidden space-y-5">
+            {/* Commercial standing — visible to Owner and Manager */}
+            <CommercialStandingNotice org={currentOrg} />
             {/* 1. HIGH-PRIORITY 'ATTENTION NEEDED' QUEUE */}
             <section id="mobile-attention-queue" className="space-y-3">
               <div className="flex items-center justify-between">
@@ -429,14 +492,19 @@ export const BusinessWorkspace: React.FC = () => {
                             <div className="text-[11px] text-slate-500">
                               {prog.name} • 10 visits completed!
                             </div>
+                            {!hasRedemptionAuthority(currentUser.id).authorised && (
+                              <div className="text-[10px] font-semibold text-slate-500 mt-0.5">
+                                Only an authorised team member can confirm.
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         <button
-                          onClick={() => setActionCustomerRel(rel)}
-                          className="px-3 py-2 rounded-xl bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs shrink-0 shadow-xs active:scale-[0.98] transition"
+                          onClick={() => { setActionBlockedMsg(null); setActionCustomerRel(rel); }}
+                          className="px-3 py-2 min-h-[44px] rounded-xl bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs shrink-0 shadow-xs active:scale-[0.98] transition"
                         >
-                          Redeem
+                          Review
                         </button>
                       </div>
                     );
@@ -541,7 +609,7 @@ export const BusinessWorkspace: React.FC = () => {
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-500">
-                            {prog?.name || 'Service'} • {isRedemption ? '11th ONUS Reward' : `${tx.quantity} visit`}
+                            {prog?.name || 'Service'} • {isRedemption ? `11th reward — confirmed by ${tx.staffName}` : `${tx.quantity} visit`}
                           </div>
                         </div>
                       </div>
@@ -653,6 +721,8 @@ export const BusinessWorkspace: React.FC = () => {
 
           {/* ================= MULTI-COLUMN DESKTOP DASHBOARD (hidden md:block) ================= */}
           <div className="hidden md:block space-y-6">
+            {/* Commercial standing — visible to Owner and Manager */}
+            <CommercialStandingNotice org={currentOrg} />
             {/* Quick Actions Bar */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-slate-700">
@@ -1253,15 +1323,15 @@ export const BusinessWorkspace: React.FC = () => {
                       <div className="pt-0.5">
                         {rel.rewardAvailable ? (
                           <button
-                            onClick={() => setActionCustomerRel(rel)}
+                            onClick={() => { setActionBlockedMsg(null); setActionCustomerRel(rel); }}
                             className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition active:scale-[0.98]"
                           >
                             <Gift className="w-4 h-4" />
-                            <span>Redeem 11th ONUS Reward</span>
+                            <span>Confirm reward provided</span>
                           </button>
                         ) : (
                           <button
-                            onClick={() => setActionCustomerRel(rel)}
+                            onClick={() => { setActionBlockedMsg(null); setActionCustomerRel(rel); }}
                             className="w-full min-h-[44px] py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 active:bg-black text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition active:scale-[0.98]"
                           >
                             <Plus className="w-4 h-4 text-amber-400" />
@@ -1600,19 +1670,22 @@ export const BusinessWorkspace: React.FC = () => {
       {/* ================= TAB 5: TEAM & STAFF (Section 13) ================= */}
       {activeTab === 'team' && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
               <h2 className="text-base font-bold text-slate-900">
                 Staff & Access Management
               </h2>
               <p className="text-xs text-slate-500">
                 Individual accounts with plain-language business permissions. No shared logins.
               </p>
+              <p className="text-[11px] text-slate-400 mt-1 border border-dashed border-slate-300 rounded-lg px-2 py-1.5">
+                Prototype review controls: grant / revoke / suspend below simulate governed authority changes for scenario review — not final Team UX.
+              </p>
             </div>
             {isOwner && (
               <button
                 onClick={() => setShowInviteModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-xs transition"
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 min-h-[44px] rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-xs transition"
               >
                 <UserPlus className="w-4 h-4" />
                 <span>Invite Staff</span>
@@ -1645,10 +1718,18 @@ export const BusinessWorkspace: React.FC = () => {
                     </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">
                       {member.role === 'business_owner'
-                        ? 'Permissions: Full administrative & commercial control'
+                        ? 'Full administrative & commercial control'
                         : member.role === 'business_manager'
-                        ? 'Permissions: Operational management, approve exceptions, view reports'
-                        : 'Permissions: Scan customers, record purchases, redeem rewards'}
+                        ? 'Operational management, approve exceptions, view reports'
+                        : 'Scan customers, record purchases'}
+                      {' • '}
+                      {(() => {
+                        const auth = hasRedemptionAuthority(member.id);
+                        if (auth.status === 'suspended') return 'Suspended — cannot confirm rewards';
+                        if (auth.status === 'revoked') return 'Reward confirmation revoked';
+                        if (auth.authorised) return 'Can confirm rewards';
+                        return 'Cannot confirm rewards';
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -1659,6 +1740,22 @@ export const BusinessWorkspace: React.FC = () => {
                   }`}>
                     {member.active ? 'Active' : 'Suspended'}
                   </span>
+                  {isOwner && member.role !== 'business_owner' && (() => {
+                    const auth = hasRedemptionAuthority(member.id);
+                    return (
+                      <button
+                        onClick={() => setRedemptionAuthority(member.id, auth.authorised ? 'revoked' : 'authorised')}
+                        title={auth.authorised ? 'Revoke reward-confirmation authority' : 'Grant reward-confirmation authority'}
+                        className={`px-2 py-1 rounded border text-[11px] font-semibold ${
+                          auth.authorised
+                            ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                            : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                        }`}
+                      >
+                        {auth.authorised ? 'Revoke confirm' : 'Grant confirm'}
+                      </button>
+                    );
+                  })()}
                   {isOwner && member.role !== 'business_owner' && (
                     <button
                       onClick={() => toggleStaffStatus(member.id)}
@@ -1715,6 +1812,8 @@ export const BusinessWorkspace: React.FC = () => {
       {/* ================= TAB 7: COMMERCIAL & USAGE (Section 26 - Owner Only) ================= */}
       {activeTab === 'commercial' && isOwner && (
         <div className="space-y-6">
+          {/* Commercial standing — same truth as the dashboard notice */}
+          <CommercialStandingNotice org={currentOrg} />
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -2456,7 +2555,7 @@ export const BusinessWorkspace: React.FC = () => {
                   onChange={e => setInviteRole(e.target.value as UserRole)}
                   className="w-full p-2 rounded-lg border border-slate-200 text-xs"
                 >
-                  <option value="frontline_staff">Frontline Staff (Can record purchases & redeem)</option>
+                  <option value="frontline_staff">Frontline Staff (Record visits; confirm only if authorised)</option>
                   <option value="business_manager">Business Manager (Operations, exceptions & reports)</option>
                   {isOwner && <option value="business_owner">Co-Owner (Full commercial & account powers)</option>}
                 </select>
@@ -2597,7 +2696,7 @@ export const BusinessWorkspace: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
-                      {actionCustomerRel.rewardAvailable ? 'Redeem 11th ONUS Reward' : 'Record Customer Visit'}
+                      {actionCustomerRel.rewardAvailable ? 'Confirm reward provided' : 'Record Customer Visit'}
                     </h3>
                     <p className="text-[11px] text-slate-500">
                       {customer.name} ({customer.onusId})
@@ -2629,14 +2728,37 @@ export const BusinessWorkspace: React.FC = () => {
               </div>
 
               {actionCustomerRel.rewardAvailable ? (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-emerald-600" />
-                    <span>11th Visit is 100% On Us</span>
+                <div className="space-y-2">
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      <span>11th Visit is 100% On Us</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-800">
+                      Confirm that the Business has provided the reward to {customer.name}. They will start earning toward the next reward right away. No customer tap is needed.
+                    </p>
+                    <p className="text-[11px] text-emerald-800 font-semibold">
+                      This confirmation is recorded under your name ({currentUser.name}).
+                    </p>
                   </div>
-                  <p className="text-[11px] text-emerald-800">
-                    Confirm that the customer is receiving their free reward now. Their loyalty circle will reset to Cycle #{actionCustomerRel.currentCycle + 1}.
-                  </p>
+                  {(() => {
+                    const auth = hasRedemptionAuthority(currentUser.id);
+                    if (auth.authorised) return null;
+                    return (
+                      <div className="p-3 rounded-xl bg-slate-100 border border-slate-300 text-xs text-slate-800">
+                        <span className="font-bold block">
+                          {auth.status === 'revoked' || auth.status === 'suspended'
+                            ? 'You no longer have permission to confirm this reward. Ask an authorised team member.'
+                            : 'A manager or authorised team member needs to confirm this reward.'}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  {actionBlockedMsg && (
+                    <div className="p-3 rounded-xl bg-slate-100 border border-slate-300 text-xs text-slate-800 font-semibold">
+                      {actionBlockedMsg}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3 text-xs">
@@ -2685,20 +2807,21 @@ export const BusinessWorkspace: React.FC = () => {
               {/* Action buttons */}
               <div className="pt-2 flex gap-2.5">
                 <button
-                  onClick={() => setActionCustomerRel(null)}
-                  className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 text-xs font-semibold hover:bg-slate-50 transition"
+                  onClick={() => { setActionBlockedMsg(null); setActionCustomerRel(null); }}
+                  className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-600 text-xs font-semibold hover:bg-slate-50 transition min-h-[48px]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleRecordActionSubmit}
-                  className={`flex-1 py-3 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-[0.98] ${
+                  disabled={actionCustomerRel.rewardAvailable && !hasRedemptionAuthority(currentUser.id).authorised}
+                  className={`flex-1 py-3 min-h-[48px] text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-[0.98] ${
                     actionCustomerRel.rewardAvailable
-                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed'
                       : 'bg-amber-600 hover:bg-amber-700'
                   }`}
                 >
-                  {actionCustomerRel.rewardAvailable ? 'Confirm Redemption' : 'Record Qualifying Visit'}
+                  {actionCustomerRel.rewardAvailable ? 'Confirm reward provided' : 'Record Qualifying Visit'}
                 </button>
               </div>
             </div>

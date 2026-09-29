@@ -5,19 +5,49 @@ export type UserRole =
   | 'participant'
   | 'platform_operator';
 
-export type OperatorSubRole = 
+export type OperatorSubRole =
   | 'platform_admin'
   | 'business_ops'
   | 'support'
   | 'integrity'
   | 'finance';
 
-export type BusinessStatus = 
+/**
+ * EXPERIENCE REFERENCE — SOLE ADMIN MODEL (launch):
+ * Founder = sole Platform Administrator. `OperatorSubRole` scaffolding above
+ * is inert prototype typing only and must NOT be treated as approved
+ * production authority boundaries. The rendered console presents a single
+ * "Platform Administrator". Differentiated roles are deferred.
+ */
+
+export type BusinessStatus =
   | 'onboarding'
   | 'trial'
   | 'active'
   | 'restricted'
   | 'suspended';
+
+/** Prototype-only onboarding progression (experience, not production lifecycle). */
+export type OnboardingState =
+  | 'incomplete'
+  | 'ready'
+  | 'trial_ready'
+  | 'commercially_active';
+
+/** Prototype-only commercial standing, kept distinct from account status. */
+export type CommercialStanding =
+  | 'trial'
+  | 'paid_active'
+  | 'grace'
+  | 'restricted'
+  | 'suspended';
+
+export interface ManualActivationRecord {
+  activatedAt: string;
+  activatedBy: string;
+  reference: string;
+  note?: string;
+}
 
 export type ProgrammeStatus = 
   | 'draft'
@@ -50,7 +80,18 @@ export interface User {
   initials: string;
   title?: string;
   active: boolean;
+  /**
+   * Experience-oriented redemption authority grant.
+   * Permission-based, not title-based. Prototype-only representation of
+   * the governed grant — NOT production auth internals.
+   * - 'authorised': may perform the Business confirmation.
+   * - 'revoked': previously authorised, grant withdrawn (stale screens must reflect this).
+   * - 'none': no grant (default for Staff/trusted users, Platform Admin, Customer).
+   */
+  redemptionAuthority?: RedemptionAuthority;
 }
+
+export type RedemptionAuthority = 'authorised' | 'revoked' | 'none';
 
 export interface Organisation {
   id: string;
@@ -71,6 +112,18 @@ export interface Organisation {
   lowCreditAlert: boolean;
   gracePeriodActive: boolean;
   createdAt: string;
+  /**
+   * Prototype-only commercial/operations extensions (experience-oriented).
+   * NOT production billing architecture.
+   */
+  onboardingState?: OnboardingState;
+  trialAllowanceTotal?: number;
+  commercialStanding?: CommercialStanding;
+  paidActive?: boolean;
+  paidActivatedAt?: string;
+  paidActivationRef?: string;
+  manualActivation?: ManualActivationRecord;
+  operatorNote?: string;
 }
 
 export interface ProgrammeRules {
@@ -188,6 +241,7 @@ export interface IntegrityCase {
   priority: 'low' | 'medium' | 'high';
   assignedOperator: string;
   createdAt: string;
+  investigationNotes?: string;
   resolutionNotes?: string;
 }
 
@@ -205,6 +259,7 @@ export interface SupportCase {
   description: string;
   linkedOrgId?: string;
   linkedOrgName?: string;
+  investigationNotes?: string;
   resolutionNotes?: string;
 }
 
