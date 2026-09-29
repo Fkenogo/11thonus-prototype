@@ -7,7 +7,6 @@ import {
   ShieldCheck,
   Sparkles,
   RotateCcw,
-  Globe,
   Monitor,
   CheckCircle2,
   ChevronDown,
@@ -26,8 +25,6 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
     currentUser,
     currentOrg,
     switchRole,
-    language,
-    setLanguage,
     deviceView,
     setDeviceView,
     resetDemoData,
@@ -201,15 +198,12 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenDemoGuide }) => {
             </button>
           )}
 
-          {/* Language Switcher */}
-          <button
-            onClick={() => setLanguage(language === 'en' ? 'fr' : 'en')}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
-            title="Switch Language: English / Français"
-          >
-            <Globe className="w-3.5 h-3.5 text-slate-400" />
-            <span>{language.toUpperCase()}</span>
-          </button>
+          {/* Language selector intentionally hidden: the prototype experience is
+              currently assembled in English only and no product component
+              consumes language state, so no selector is shown. French
+              localisation remains a later production/experience-assembly
+              requirement. Underlying seams (AppLanguage, redemptionCopy,
+              market default-language metadata) are preserved. */}
 
           {/* Reset Demo Data */}
           <button
