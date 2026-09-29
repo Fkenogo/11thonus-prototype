@@ -118,6 +118,22 @@ interface AppContextType {
   resolveSupportCase: (caseId: string, notes: string) => void;
   toggleOrgStatus: (orgId: string, newStatus: Organisation['status'], reason: string) => void;
 
+  // Launch operator commercial actions (prototype experience only — manual
+  // transitions that payment automation may later perform; no payment gateway).
+  grantTrial: (orgId: string, units: number, reason: string) => void;
+  adjustTrial: (orgId: string, delta: number, reason: string) => void;
+  activatePaidService: (orgId: string, reference: string, note?: string) => void;
+  addCommercialCredit: (orgId: string, amountUSD: number, reference: string) => void;
+  adjustCommercialCredit: (orgId: string, deltaUSD: number, reason: string) => void;
+  restrictBusiness: (orgId: string, reason: string) => void;
+  restoreBusiness: (orgId: string, reason: string) => void;
+  setOnboardingState: (orgId: string, state: Organisation['onboardingState'], reason?: string) => void;
+  updateIntegrityCase: (caseId: string, status: 'open' | 'under_review' | 'resolved' | 'dismissed', notes: string) => void;
+  updateSupportCase: (caseId: string, status: 'open' | 'investigating' | 'resolved', notes: string) => void;
+
+  /** Deterministic prototype review scenarios A–F (operator console only). */
+  applyOperatorScenario: (scenario: 'A' | 'B' | 'C' | 'D' | 'E' | 'F') => void;
+
   // Guided walkthrough
   resetDemoData: () => void;
   jumpToDemoStep: (stepNumber: number) => void;
@@ -1201,6 +1217,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // 7. OPERATOR ACTIONS
+  const pushAudit = (entry: Omit<AuditLogEntry, 'id' | 'timestamp'>) => {
+    const now = new Date().toISOString();
+    setAuditLogs(prev => [
+      { ...entry, id: `aud-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 99)}`, timestamp: now },
+      ...prev
+    ]);
+  };
+
+  const adminName = 'Platform Administrator';
   const resolveIntegrityCase = (caseId: string, notes: string) => {
     setIntegrityCases(prev => prev.map(c => {
       if (c.id !== caseId) return c;
@@ -1228,30 +1253,341 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleOrgStatus = (orgId: string, newStatus: Organisation['status'], reason: string) => {
-    setOrganisations(prev => prev.map(o => {
+    const prev = organisations.find(o => o.id === orgId);
+    setOrganisations(prevOrgs => prevOrgs.map(o => {
       if (o.id !== orgId) return o;
       return { ...o, status: newStatus };
     }));
 
-    setAuditLogs(prev => [
-      {
-        id: `aud-${Date.now().toString().slice(-4)}`,
-        actorName: currentUser.name,
-        actorRole: 'Platform Operator',
-        action: 'ORGANISATION_STATUS_AMENDED',
-        targetType: 'Organisation',
-        targetId: orgId,
-        reason,
-        timestamp: new Date().toISOString()
-      },
-      ...prev
-    ]);
+    pushAudit({
+      actorName: currentUser.name || adminName,
+      actorRole: 'Platform Administrator',
+      action: 'ORGANISATION_STATUS_AMENDED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `status: ${prev?.status ?? 'unknown'}`,
+      newState: `status: ${newStatus}`
+    });
 
     showToast({
       title: 'Organisation status updated',
       description: `Organisation is now ${newStatus}. Logged in platform audit history.`,
       type: 'warning'
     });
+  };
+
+  // ---- Launch commercial operations (manual, governed, audited) ----
+  const grantTrial = (orgId: string, units: number, reason: string) => {
+    const bounded = Math.max(1, Math.min(100, Math.round(units)));
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.trialCirclesRemaining;
+    const allowance = (org.trialAllowanceTotal ?? 50);
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        trialCirclesRemaining: o.trialCirclesRemaining + bounded,
+        trialAllowanceTotal: allowance,
+        status: o.status === 'onboarding' ? 'trial' : o.status,
+        onboardingState: 'trial_ready',
+        commercialStanding: o.paidActive ? 'paid_active' : 'trial'
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'TRIAL_GRANTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: reason || `Trial granted (${bounded} units).`,
+      previousState: `trialRemaining: ${before}`,
+      newState: `trialRemaining: ${before + bounded}`
+    });
+    showToast({ title: 'Trial granted', description: `${org.name}: +${bounded} trial units. Now trial-ready.`, type: 'success' });
+  };
+
+  const adjustTrial = (orgId: string, delta: number, reason: string) => {
+    const bounded = Math.max(-50, Math.min(50, Math.round(delta)));
+    if (bounded === 0) return;
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.trialCirclesRemaining;
+    const after = Math.max(0, before + bounded);
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      const standing: Organisation['commercialStanding'] =
+        o.paidActive ? 'paid_active' : after === 0 && o.creditBalanceUSD <= 0 ? 'restricted' : after > 0 ? 'trial' : o.commercialStanding;
+      return { ...o, trialCirclesRemaining: after, commercialStanding: standing };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'TRIAL_ADJUSTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: reason || `Trial adjusted (${bounded > 0 ? '+' : ''}${bounded}).`,
+      previousState: `trialRemaining: ${before}`,
+      newState: `trialRemaining: ${after}`
+    });
+    showToast({ title: 'Trial adjusted', description: `${org.name}: trial ${before} → ${after}.`, type: 'info' });
+  };
+
+  const activatePaidService = (orgId: string, reference: string, note?: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const now = new Date().toISOString();
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        paidActive: true,
+        paidActivatedAt: now,
+        paidActivationRef: reference,
+        manualActivation: { activatedAt: now, activatedBy: adminName, reference, note },
+        status: 'active',
+        onboardingState: 'commercially_active',
+        commercialStanding: 'paid_active',
+        gracePeriodActive: false
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'PAID_SERVICE_MANUALLY_ACTIVATED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: `Offline payment confirmed. Ref ${reference}.${note ? ` ${note}` : ''}`,
+      previousState: `commercialStanding: ${org.commercialStanding ?? 'unknown'}`,
+      newState: 'commercialStanding: paid_active'
+    });
+    showToast({ title: 'Paid service activated', description: `${org.name} manually activated under paid terms. Ref ${reference}.`, type: 'success' });
+  };
+
+  const addCommercialCredit = (orgId: string, amountUSD: number, reference: string) => {
+    const bounded = Math.max(1, Math.min(500, Math.round(amountUSD)));
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.creditBalanceUSD;
+    const after = before + bounded;
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      const clearsRestriction = after > 0;
+      return {
+        ...o,
+        creditBalanceUSD: after,
+        lowCreditAlert: after < 5 && o.trialCirclesRemaining === 0,
+        gracePeriodActive: after <= 0,
+        commercialStanding: clearsRestriction
+          ? (o.paidActive ? 'paid_active' : o.trialCirclesRemaining > 0 ? 'trial' : 'paid_active')
+          : o.commercialStanding,
+        status: clearsRestriction && o.status === 'restricted' ? 'active' : o.status
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'CREDIT_ADDED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: `Approved credit added: $${bounded}. Ref ${reference}.`,
+      previousState: `credit: $${before.toFixed(2)}`,
+      newState: `credit: $${after.toFixed(2)}`
+    });
+    showToast({ title: 'Commercial credit added', description: `${org.name}: $${before.toFixed(2)} → $${after.toFixed(2)}.`, type: 'success' });
+  };
+
+  const adjustCommercialCredit = (orgId: string, deltaUSD: number, reason: string) => {
+    const bounded = Math.max(-50, Math.min(100, Math.round(deltaUSD)));
+    if (bounded === 0 || !reason.trim()) return;
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const before = org.creditBalanceUSD;
+    const after = Math.max(-25, before + bounded);
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        creditBalanceUSD: after,
+        lowCreditAlert: after < 5 && o.trialCirclesRemaining === 0,
+        gracePeriodActive: after <= 0 ? true : false,
+        commercialStanding: after <= 0 ? 'grace' : o.commercialStanding
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'CREDIT_ADJUSTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `credit: $${before.toFixed(2)}`,
+      newState: `credit: $${after.toFixed(2)}`
+    });
+    showToast({ title: 'Credit adjusted', description: `${org.name}: $${before.toFixed(2)} → $${after.toFixed(2)}.`, type: 'info' });
+  };
+
+  const restrictBusiness = (orgId: string, reason: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return { ...o, status: 'restricted', commercialStanding: 'restricted' as const };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'BUSINESS_RESTRICTED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `status: ${org.status} / standing: ${org.commercialStanding ?? 'unknown'}`,
+      newState: 'status: restricted / standing: restricted (earned rewards + active cycles preserved)'
+    });
+    showToast({ title: 'Business restricted', description: `${org.name}: new starts blocked. Earned rewards remain redeemable.`, type: 'warning' });
+  };
+
+  const restoreBusiness = (orgId: string, reason: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    const standing: Organisation['commercialStanding'] =
+      org.paidActive ? 'paid_active' : org.trialCirclesRemaining > 0 ? 'trial' : org.creditBalanceUSD > 0 ? 'paid_active' : 'grace';
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        status: standing === 'grace' ? 'restricted' : 'active',
+        commercialStanding: standing,
+        gracePeriodActive: standing === 'grace',
+        lowCreditAlert: o.creditBalanceUSD < 5 && o.trialCirclesRemaining === 0
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'BUSINESS_RESTORED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason,
+      previousState: `status: ${org.status} / standing: ${org.commercialStanding ?? 'unknown'}`,
+      newState: `status: ${standing === 'grace' ? 'restricted' : 'active'} / standing: ${standing}`
+    });
+    showToast({ title: 'Standing restored', description: `${org.name}: commercial standing → ${standing}.`, type: 'success' });
+  };
+
+  const setOnboardingState = (orgId: string, state: Organisation['onboardingState'], reason?: string) => {
+    const org = organisations.find(o => o.id === orgId);
+    if (!org) return;
+    setOrganisations(prev => prev.map(o => {
+      if (o.id !== orgId) return o;
+      return {
+        ...o,
+        onboardingState: state,
+        status: state === 'commercially_active' ? 'active' : state === 'trial_ready' ? (o.status === 'onboarding' ? 'trial' : o.status) : o.status
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: 'ONBOARDING_STATE_UPDATED',
+      targetType: 'Organisation',
+      targetId: orgId,
+      reason: reason || `Onboarding → ${state}.`,
+      previousState: `onboarding: ${org.onboardingState ?? 'unknown'}`,
+      newState: `onboarding: ${state}`
+    });
+  };
+
+  const updateIntegrityCase = (caseId: string, status: 'open' | 'under_review' | 'resolved' | 'dismissed', notes: string) => {
+    setIntegrityCases(prev => prev.map(c => {
+      if (c.id !== caseId) return c;
+      return {
+        ...c,
+        status,
+        investigationNotes: notes ? `${c.investigationNotes ? c.investigationNotes + ' | ' : ''}${notes}` : c.investigationNotes,
+        resolutionNotes: status === 'resolved' || status === 'dismissed' ? notes : c.resolutionNotes
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: status === 'resolved' ? 'INTEGRITY_CASE_RESOLVED' : status === 'dismissed' ? 'INTEGRITY_CASE_DISMISSED' : 'INTEGRITY_CASE_REVIEWED',
+      targetType: 'IntegrityCase',
+      targetId: caseId,
+      reason: notes || `Integrity case → ${status}.`
+    });
+    showToast({ title: `Integrity case ${status.replace('_', ' ')}`, description: 'Investigation record preserved in audit.', type: 'info' });
+  };
+
+  const updateSupportCase = (caseId: string, status: 'open' | 'investigating' | 'resolved', notes: string) => {
+    setSupportCases(prev => prev.map(c => {
+      if (c.id !== caseId) return c;
+      return {
+        ...c,
+        status,
+        investigationNotes: notes ? `${c.investigationNotes ? c.investigationNotes + ' | ' : ''}${notes}` : c.investigationNotes,
+        resolutionNotes: status === 'resolved' ? notes : c.resolutionNotes
+      };
+    }));
+    pushAudit({
+      actorName: adminName,
+      actorRole: 'Platform Administrator',
+      action: status === 'resolved' ? 'SUPPORT_CASE_RESOLVED' : 'SUPPORT_CASE_STATUS_UPDATED',
+      targetType: 'SupportCase',
+      targetId: caseId,
+      reason: notes || `Support case → ${status}.`
+    });
+    showToast({ title: `Support case ${status}`, description: 'Case progress recorded.', type: 'info' });
+  };
+
+  const applyOperatorScenario = (scenario: 'A' | 'B' | 'C' | 'D' | 'E' | 'F') => {
+    setToasts([]);
+    if (scenario === 'A') {
+      // New Business awaiting trial
+      setOrganisations(prev => prev.map(o => o.id === 'org-kivu-bistro' ? {
+        ...o, status: 'onboarding' as const, onboardingState: 'ready' as const,
+        trialCirclesRemaining: 0, trialAllowanceTotal: 50, creditBalanceUSD: 0,
+        paidActive: false, commercialStanding: 'trial' as const, gracePeriodActive: false
+      } : o));
+      setSupportCases(INITIAL_SUPPORT_CASES);
+      showToast({ title: 'Scenario A ready', description: 'Kivu Fresh Bistro is onboarding-ready with no trial. Grant trial from Businesses or Commercial.', type: 'info' });
+    } else if (scenario === 'B') {
+      // Trial nearing exhaustion
+      setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {
+        ...o, status: 'trial' as const, onboardingState: 'trial_ready' as const,
+        trialCirclesRemaining: 2, trialAllowanceTotal: 90, creditBalanceUSD: 12,
+        paidActive: false, commercialStanding: 'trial' as const
+      } : o));
+      showToast({ title: 'Scenario B ready', description: "Joe's Coffee: 2 trial units left. Review consumption, grant a bounded extension.", type: 'info' });
+    } else if (scenario === 'C') {
+      // Offline payment confirmed → manual activation
+      setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {
+        ...o, trialCirclesRemaining: 0, creditBalanceUSD: 12, paidActive: false,
+        status: 'trial' as const, onboardingState: 'trial_ready' as const, commercialStanding: 'trial' as const
+      } : o));
+      showToast({ title: 'Scenario C ready', description: "Joe's Coffee trial exhausted with offline payment pending. Manually activate paid service.", type: 'info' });
+    } else if (scenario === 'D') {
+      // Add commercial credit
+      setOrganisations(prev => prev.map(o => o.id === 'org-sparkle-wash' ? {
+        ...o, trialCirclesRemaining: 0, creditBalanceUSD: 2, lowCreditAlert: true,
+        status: 'active' as const, commercialStanding: 'grace' as const, gracePeriodActive: true, paidActive: false
+      } : o));
+      showToast({ title: 'Scenario D ready', description: 'Sparkle Car Wash: $2.00 credit. Add approved credit and watch balance/history update.', type: 'info' });
+    } else if (scenario === 'E') {
+      // Zero credit / restricted new starts
+      setOrganisations(prev => prev.map(o => o.id === 'org-sparkle-wash' ? {
+        ...o, trialCirclesRemaining: 0, creditBalanceUSD: 0, lowCreditAlert: true,
+        status: 'restricted' as const, commercialStanding: 'grace' as const,
+        gracePeriodActive: true, paidActive: false,
+        operatorNote: 'Zero credit: new starts blocked. Active circles may finish; earned rewards remain redeemable.'
+      } : o));
+      showToast({ title: 'Scenario E ready', description: 'Sparkle Car Wash: zero credit, new starts blocked. Restore after commercial resolution.', type: 'info' });
+    } else {
+      setSupportCases(INITIAL_SUPPORT_CASES);
+      setIntegrityCases(INITIAL_INTEGRITY_CASES);
+      showToast({ title: 'Scenario F ready', description: 'Support queue reset. Open SUP-8804 (Kivu setup) and jump into the linked Business 360°.', type: 'info' });
+    }
   };
 
   // 8. GUIDED SCRIPTED DEMO STEPS (Sections 55 - 58)
@@ -1376,6 +1712,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resolveIntegrityCase,
         resolveSupportCase,
         toggleOrgStatus,
+        grantTrial,
+        adjustTrial,
+        activatePaidService,
+        addCommercialCredit,
+        adjustCommercialCredit,
+        restrictBusiness,
+        restoreBusiness,
+        setOnboardingState,
+        updateIntegrityCase,
+        updateSupportCase,
+        applyOperatorScenario,
         resetDemoData,
         jumpToDemoStep,
         currentDemoStep,
