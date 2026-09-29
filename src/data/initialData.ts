@@ -27,14 +27,14 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     status: 'active',
     logoText: 'BS',
     primaryContact: 'Grace Ndayishimiye',
-    trialCirclesRemaining: 18,
+    trialCirclesRemaining: 0,
     completedBillableCircles: 32,
     creditBalanceUSD: 45.0,
     lowCreditAlert: false,
     gracePeriodActive: false,
     createdAt: '2026-03-12',
     onboardingState: 'commercially_active',
-    trialAllowanceTotal: 50,
+    trialAllowanceTotal: 5,
     commercialStanding: 'paid_active',
     paidActive: true,
     paidActivatedAt: '2026-05-02T10:00:00Z',
@@ -53,14 +53,14 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     status: 'trial',
     logoText: 'JC',
     primaryContact: 'Joseph Kamanzi',
-    trialCirclesRemaining: 4,
+    trialCirclesRemaining: 2,
     completedBillableCircles: 86,
     creditBalanceUSD: 12.0,
     lowCreditAlert: false,
     gracePeriodActive: false,
     createdAt: '2026-01-20',
     onboardingState: 'trial_ready',
-    trialAllowanceTotal: 90,
+    trialAllowanceTotal: 5,
     commercialStanding: 'trial',
     paidActive: false
   },
@@ -84,10 +84,10 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     gracePeriodActive: true,
     createdAt: '2026-05-18',
     onboardingState: 'trial_ready',
-    trialAllowanceTotal: 14,
+    trialAllowanceTotal: 5,
     commercialStanding: 'grace',
     paidActive: false,
-    operatorNote: 'Zero credit: new starts blocked. Active circles may finish; earned rewards remain redeemable.'
+    operatorNote: 'Zero credit: new starts blocked. Active circles may finish; earned rewards remain redeemable; loyalty history intact.'
   },
   {
     id: 'org-kivu-bistro',
@@ -109,7 +109,7 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     gracePeriodActive: false,
     createdAt: '2026-09-14',
     onboardingState: 'ready',
-    trialAllowanceTotal: 50,
+    trialAllowanceTotal: 5,
     commercialStanding: 'trial',
     paidActive: false
   }
@@ -754,23 +754,5 @@ export const INITIAL_MARKETS: MarketConfig[] = [
     defaultLanguage: 'en',
     activeBusinessesCount: 38,
     status: 'active'
-  },
-  {
-    id: 'mkt-cd',
-    country: 'DR Congo (East)',
-    code: 'COD',
-    currency: 'USD',
-    defaultLanguage: 'fr',
-    activeBusinessesCount: 8,
-    status: 'beta'
-  },
-  {
-    id: 'mkt-tz',
-    country: 'Tanzania',
-    code: 'TZA',
-    currency: 'TZS',
-    defaultLanguage: 'en',
-    activeBusinessesCount: 0,
-    status: 'planned'
   }
 ];

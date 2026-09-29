@@ -70,7 +70,6 @@ export const OperatorConsole: React.FC = () => {
     adjustCommercialCredit,
     restrictBusiness,
     restoreBusiness,
-    setOnboardingState,
     updateIntegrityCase,
     updateSupportCase,
     applyOperatorScenario
@@ -83,9 +82,9 @@ export const OperatorConsole: React.FC = () => {
   const [auditQuery, setAuditQuery] = useState('');
 
   // Commercial form state (per selected org)
-  const [trialUnits, setTrialUnits] = useState(25);
+  const [trialUnits, setTrialUnits] = useState(5);
   const [trialReason, setTrialReason] = useState('');
-  const [trialDelta, setTrialDelta] = useState(10);
+  const [trialDelta, setTrialDelta] = useState(2);
   const [trialAdjReason, setTrialAdjReason] = useState('');
   const [payRef, setPayRef] = useState('');
   const [payNote, setPayNote] = useState('');
@@ -151,7 +150,7 @@ export const OperatorConsole: React.FC = () => {
   };
 
   const renderCommercialPanel = (org: Organisation) => {
-    const trialUsed = (org.trialAllowanceTotal ?? 50) - org.trialCirclesRemaining;
+    const trialUsed = (org.trialAllowanceTotal ?? 5) - org.trialCirclesRemaining;
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -161,7 +160,7 @@ export const OperatorConsole: React.FC = () => {
           </div>
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
             <span className="text-slate-500 block">Trial allowance / remaining</span>
-            <strong className="text-slate-900">{org.trialAllowanceTotal ?? 50} / {org.trialCirclesRemaining}</strong>
+            <strong className="text-slate-900">{org.trialAllowanceTotal ?? 5} / {org.trialCirclesRemaining}</strong>
             <span className="block text-[11px] text-slate-500">Used: {Math.max(0, trialUsed)} • $1 per completed circle</span>
           </div>
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
@@ -191,16 +190,17 @@ export const OperatorConsole: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
             <h4 className="text-xs font-bold text-slate-900">Start / grant trial</h4>
-            <p className="text-[11px] text-slate-500">Governed trial units only. No subscription tiers.</p>
+            <p className="text-[11px] text-slate-500">Governed trial units only (3–5-unit trial direction; 5-unit example shown). No subscription tiers.</p>
             <div className="flex gap-2">
-              <input type="number" min={1} max={100} value={trialUnits} onChange={e => setTrialUnits(Number(e.target.value))} className="w-24 p-2 rounded-lg border border-slate-200 text-xs" />
+              <input type="number" min={1} max={5} value={trialUnits} onChange={e => setTrialUnits(Number(e.target.value))} className="w-24 p-2 rounded-lg border border-slate-200 text-xs" />
               <input value={trialReason} onChange={e => setTrialReason(e.target.value)} placeholder="Reason / note (required in review)" className="flex-1 p-2 rounded-lg border border-slate-200 text-xs" />
             </div>
             <button onClick={() => { grantTrial(org.id, trialUnits, trialReason || `Trial granted (${trialUnits} units) for launch onboarding.`); setTrialReason(''); }} className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold">Grant trial</button>
             <div className="pt-2 border-t border-slate-100 space-y-2">
-              <h4 className="text-xs font-bold text-slate-900">Bounded trial extension / adjustment (±50)</h4>
+              <h4 className="text-xs font-bold text-slate-900">Small trial extension / adjustment (±5)</h4>
+              <p className="text-[11px] text-slate-500">Prototype entry bound only — not a governed trial rule.</p>
               <div className="flex gap-2">
-                <input type="number" min={-50} max={50} value={trialDelta} onChange={e => setTrialDelta(Number(e.target.value))} className="w-24 p-2 rounded-lg border border-slate-200 text-xs" />
+                <input type="number" min={-5} max={5} value={trialDelta} onChange={e => setTrialDelta(Number(e.target.value))} className="w-24 p-2 rounded-lg border border-slate-200 text-xs" />
                 <input value={trialAdjReason} onChange={e => setTrialAdjReason(e.target.value)} placeholder="Reason for adjustment" className="flex-1 p-2 rounded-lg border border-slate-200 text-xs" />
               </div>
               <button onClick={() => { adjustTrial(org.id, trialDelta, trialAdjReason || `Trial adjusted (${trialDelta}).`); setTrialAdjReason(''); }} className="px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold">Apply trial adjustment</button>
@@ -234,7 +234,7 @@ export const OperatorConsole: React.FC = () => {
 
           <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2">
             <h4 className="text-xs font-bold text-slate-900">Restriction / restoration</h4>
-            <p className="text-[11px] text-slate-500">Restriction blocks new starts only. Earned rewards, active cycles and loyalty history are preserved.</p>
+            <p className="text-[11px] text-slate-500">Restriction blocks new Circle starts only. Already-active Circles may finish under grace; already-earned rewards remain redeemable and are never cancelled; loyalty history remains intact. Commercial standing never blocks reward redemption.</p>
             <input value={restrictReason} onChange={e => setRestrictReason(e.target.value)} placeholder="Restriction reason" className="w-full p-2 rounded-lg border border-slate-200 text-xs" />
             <div className="flex gap-2">
               <button onClick={() => { if (!restrictReason.trim()) return; restrictBusiness(org.id, restrictReason.trim()); setRestrictReason(''); }} disabled={!restrictReason.trim()} className="flex-1 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-xs font-bold">Restrict</button>
@@ -302,9 +302,12 @@ export const OperatorConsole: React.FC = () => {
             <div>Primary contact: <strong>{org.primaryContact}</strong></div>
             <div>{org.email} • {org.phone}</div>
             <div>{org.address}</div>
-            <div className="pt-1 flex gap-2">
-              {org.onboardingState !== 'commercially_active' && (
-                <button onClick={() => setOnboardingState(org.id, org.onboardingState === 'ready' ? 'trial_ready' : 'commercially_active', 'Operator onboarding progression.')} className="px-2.5 py-1.5 rounded bg-slate-900 text-white font-semibold">Advance onboarding</button>
+            <div className="pt-1 flex gap-2 flex-wrap">
+              {(org.onboardingState === 'incomplete' || org.onboardingState === 'ready') && org.trialCirclesRemaining === 0 && !org.paidActive && (
+                <button onClick={() => grantTrial(org.id, 5, 'Launch trial granted (5-unit trial direction example).')} className="px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold">Grant trial (5 units)</button>
+              )}
+              {(org.onboardingState === 'trial_ready' || org.trialCirclesRemaining > 0) && !org.paidActive && (
+                <button onClick={() => setActiveNav('commercial')} className="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Activate paid service →</button>
               )}
             </div>
           </div>
@@ -509,7 +512,7 @@ export const OperatorConsole: React.FC = () => {
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-slate-200 p-5">
             <h2 className="text-base font-bold">Commercial operations (launch — manual)</h2>
-            <p className="text-xs text-slate-500">No payment automation. The Administrator manually performs trial, activation and credit transitions. Flat $1 unit • consumption-first • no tiers • trial units • grace finishes active circles • zero blocks new starts • earned rewards stay redeemable.</p>
+            <p className="text-xs text-slate-500">No payment automation. The Administrator manually performs trial, activation and credit transitions. Flat $1 unit • consumption-first • no tiers • trial units • grace finishes active circles • zero blocks new Circle starts • earned rewards stay redeemable and are never cancelled • history intact. Commercial standing never blocks reward redemption.</p>
             <div className="mt-3 flex gap-2 flex-wrap">
               {organisations.map(o => (
                 <button key={o.id} onClick={() => setSelectedOrgId(o.id)} className={`px-3 py-1.5 rounded-lg border text-xs font-semibold ${selectedOrgId === o.id ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{o.name}</button>
@@ -614,12 +617,13 @@ export const OperatorConsole: React.FC = () => {
 
       {activeNav === 'platform' && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-          <div><h2 className="text-base font-bold">Platform readiness</h2><p className="text-xs text-slate-500">Markets, currencies and product-level health. No backend/provider internals exposed.</p></div>
+          <div><h2 className="text-base font-bold">Platform readiness</h2><p className="text-xs text-slate-500">Markets, currencies and product-level health. No backend/provider internals exposed. English is the primary customer-facing language; French is optional/deferred — no French UI is implemented in this prototype.</p></div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {markets.map(m => (
               <div key={m.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 text-xs space-y-1.5">
                 <div className="flex items-center justify-between"><span className="font-bold text-sm">{m.country}</span><Badge tone={m.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}>{m.status}</Badge></div>
-                <div>Currency: <strong>{m.currency}</strong> ({m.code}) • Language: <strong>{m.defaultLanguage.toUpperCase()}</strong></div>
+                <div>Currency: <strong>{m.currency}</strong> ({m.code})</div>
+                <div>Configured default language: <strong>{m.defaultLanguage.toUpperCase()}</strong> <span className="text-slate-400">(market configuration — not implemented localisation)</span></div>
                 <div>Active businesses: <strong>{m.activeBusinessesCount}</strong></div>
               </div>
             ))}

@@ -995,9 +995,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'active',
       logoText: (orgData.name || 'NO').slice(0, 2).toUpperCase(),
       primaryContact: orgData.primaryContact || currentUser.name,
-      trialCirclesRemaining: 25,
+      trialCirclesRemaining: 5,
       completedBillableCircles: 0,
-      creditBalanceUSD: 25.0,
+      creditBalanceUSD: 0.0,
       lowCreditAlert: false,
       gracePeriodActive: false,
       createdAt: new Date().toISOString().split('T')[0]
@@ -1279,11 +1279,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ---- Launch commercial operations (manual, governed, audited) ----
   const grantTrial = (orgId: string, units: number, reason: string) => {
-    const bounded = Math.max(1, Math.min(100, Math.round(units)));
+    // Prototype entry bound (3–5-unit governed trial direction): grants are
+    // capped at 5 units. This cap is an experience guardrail, not a claim
+    // that 5 is the universally governed default.
+    const bounded = Math.max(1, Math.min(5, Math.round(units)));
     const org = organisations.find(o => o.id === orgId);
     if (!org) return;
     const before = org.trialCirclesRemaining;
-    const allowance = (org.trialAllowanceTotal ?? 50);
+    const allowance = (org.trialAllowanceTotal ?? 5);
     setOrganisations(prev => prev.map(o => {
       if (o.id !== orgId) return o;
       return {
@@ -1309,7 +1312,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const adjustTrial = (orgId: string, delta: number, reason: string) => {
-    const bounded = Math.max(-50, Math.min(50, Math.round(delta)));
+    // Small plausible extension/adjustment within the 3–5-unit trial model.
+    // The ±5 prototype entry bound is NOT a governed trial rule.
+    const bounded = Math.max(-5, Math.min(5, Math.round(delta)));
     if (bounded === 0) return;
     const org = organisations.find(o => o.id === orgId);
     if (!org) return;
@@ -1404,7 +1409,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const org = organisations.find(o => o.id === orgId);
     if (!org) return;
     const before = org.creditBalanceUSD;
-    const after = Math.max(-25, before + bounded);
+    // Governed principle: negative credit may be recoverable. No maximum
+    // negative balance is invented here — the balance simply moves.
+    const after = before + bounded;
     setOrganisations(prev => prev.map(o => {
       if (o.id !== orgId) return o;
       return {
@@ -1544,43 +1551,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const applyOperatorScenario = (scenario: 'A' | 'B' | 'C' | 'D' | 'E' | 'F') => {
     setToasts([]);
     if (scenario === 'A') {
-      // New Business awaiting trial
+      // New Business awaiting trial (governed 3–5-unit trial model: 5-unit example)
       setOrganisations(prev => prev.map(o => o.id === 'org-kivu-bistro' ? {
         ...o, status: 'onboarding' as const, onboardingState: 'ready' as const,
-        trialCirclesRemaining: 0, trialAllowanceTotal: 50, creditBalanceUSD: 0,
+        trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 0,
         paidActive: false, commercialStanding: 'trial' as const, gracePeriodActive: false
       } : o));
       setSupportCases(INITIAL_SUPPORT_CASES);
       showToast({ title: 'Scenario A ready', description: 'Kivu Fresh Bistro is onboarding-ready with no trial. Grant trial from Businesses or Commercial.', type: 'info' });
     } else if (scenario === 'B') {
-      // Trial nearing exhaustion
+      // Trial nearing exhaustion: 5 granted, 3 consumed, 2 remaining
       setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {
         ...o, status: 'trial' as const, onboardingState: 'trial_ready' as const,
-        trialCirclesRemaining: 2, trialAllowanceTotal: 90, creditBalanceUSD: 12,
+        trialCirclesRemaining: 2, trialAllowanceTotal: 5, creditBalanceUSD: 12,
         paidActive: false, commercialStanding: 'trial' as const
       } : o));
       showToast({ title: 'Scenario B ready', description: "Joe's Coffee: 2 trial units left. Review consumption, grant a bounded extension.", type: 'info' });
     } else if (scenario === 'C') {
-      // Offline payment confirmed → manual activation
+      // Offline payment confirmed → manual activation (5-unit trial consumed)
       setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {
-        ...o, trialCirclesRemaining: 0, creditBalanceUSD: 12, paidActive: false,
+        ...o, trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 12, paidActive: false,
         status: 'trial' as const, onboardingState: 'trial_ready' as const, commercialStanding: 'trial' as const
       } : o));
       showToast({ title: 'Scenario C ready', description: "Joe's Coffee trial exhausted with offline payment pending. Manually activate paid service.", type: 'info' });
     } else if (scenario === 'D') {
-      // Add commercial credit
+      // Add commercial credit (trial consumed: 5 granted, 5 used)
       setOrganisations(prev => prev.map(o => o.id === 'org-sparkle-wash' ? {
-        ...o, trialCirclesRemaining: 0, creditBalanceUSD: 2, lowCreditAlert: true,
+        ...o, trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 2, lowCreditAlert: true,
         status: 'active' as const, commercialStanding: 'grace' as const, gracePeriodActive: true, paidActive: false
       } : o));
       showToast({ title: 'Scenario D ready', description: 'Sparkle Car Wash: $2.00 credit. Add approved credit and watch balance/history update.', type: 'info' });
     } else if (scenario === 'E') {
-      // Zero credit / restricted new starts
+      // Zero credit / restricted new starts (trial consumed: 5 granted, 5 used).
+      // New starts blocked; active circles may finish; earned rewards stay redeemable.
       setOrganisations(prev => prev.map(o => o.id === 'org-sparkle-wash' ? {
-        ...o, trialCirclesRemaining: 0, creditBalanceUSD: 0, lowCreditAlert: true,
+        ...o, trialCirclesRemaining: 0, trialAllowanceTotal: 5, creditBalanceUSD: 0, lowCreditAlert: true,
         status: 'restricted' as const, commercialStanding: 'grace' as const,
         gracePeriodActive: true, paidActive: false,
-        operatorNote: 'Zero credit: new starts blocked. Active circles may finish; earned rewards remain redeemable.'
+        operatorNote: 'Zero credit: new starts blocked. Active circles may finish; earned rewards remain redeemable; loyalty history intact.'
       } : o));
       showToast({ title: 'Scenario E ready', description: 'Sparkle Car Wash: zero credit, new starts blocked. Restore after commercial resolution.', type: 'info' });
     } else {
