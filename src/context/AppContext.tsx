@@ -1560,13 +1560,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSupportCases(INITIAL_SUPPORT_CASES);
       showToast({ title: 'Scenario A ready', description: 'Kivu Fresh Bistro is onboarding-ready with no trial. Grant trial from Businesses or Commercial.', type: 'info' });
     } else if (scenario === 'B') {
-      // Trial nearing exhaustion: 5 granted, 3 consumed, 2 remaining
+      // Trial nearing exhaustion: 5 granted, 4 consumed, 1 remaining.
+      // "1 remaining" is an Experience Reference presentation threshold,
+      // not a governed commercial rule.
       setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {
         ...o, status: 'trial' as const, onboardingState: 'trial_ready' as const,
-        trialCirclesRemaining: 2, trialAllowanceTotal: 5, creditBalanceUSD: 12,
+        trialCirclesRemaining: 1, trialAllowanceTotal: 5, creditBalanceUSD: 12,
         paidActive: false, commercialStanding: 'trial' as const
       } : o));
-      showToast({ title: 'Scenario B ready', description: "Joe's Coffee: 2 trial units left. Review consumption, grant a bounded extension.", type: 'info' });
+      showToast({ title: 'Scenario B ready', description: "Joe's Coffee: 1 trial unit left. Review consumption, grant a bounded extension.", type: 'info' });
     } else if (scenario === 'C') {
       // Offline payment confirmed → manual activation (5-unit trial consumed)
       setOrganisations(prev => prev.map(o => o.id === 'org-joes-coffee' ? {

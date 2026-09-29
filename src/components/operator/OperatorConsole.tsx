@@ -112,7 +112,11 @@ export const OperatorConsole: React.FC = () => {
   const onboardingQueue = organisations.filter(
     o => o.status === 'onboarding' || o.onboardingState === 'incomplete' || o.onboardingState === 'ready'
   );
-  const trialLow = organisations.filter(o => o.trialCirclesRemaining > 0 && o.trialCirclesRemaining <= 5 && !o.paidActive);
+  // Experience Reference operational presentation threshold: with the
+  // governed 3–5-unit trial direction (5-unit prototype example), "nearing
+  // exhaustion" means 1 unit remaining. This threshold is a console
+  // presentation choice, NOT a newly approved commercial policy.
+  const trialLow = organisations.filter(o => o.trialCirclesRemaining === 1 && !o.paidActive);
   const trialExhausted = organisations.filter(o => o.trialCirclesRemaining === 0 && !o.paidActive);
   const awaitingActivation = organisations.filter(
     o => !o.paidActive && o.onboardingState !== 'incomplete' && (o.trialCirclesRemaining === 0 || o.creditBalanceUSD > 0)
@@ -428,7 +432,7 @@ export const OperatorConsole: React.FC = () => {
               {onboardingQueue.length === 0 && <p className="text-xs text-slate-400">No businesses awaiting onboarding.</p>}
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 pt-2">Commercial queues</h2>
               {[
-                { label: 'Trial nearing exhaustion (≤5 left)', items: trialLow },
+                { label: 'Trial nearing exhaustion — 1 unit remaining', items: trialLow },
                 { label: 'Trial exhausted / awaiting paid activation', items: trialExhausted },
                 { label: 'Low credit (<$5, no trial)', items: lowCredit },
                 { label: 'Zero credit (new starts blocked)', items: zeroCredit },

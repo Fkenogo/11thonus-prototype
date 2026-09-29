@@ -53,7 +53,7 @@ export const INITIAL_ORGANISATIONS: Organisation[] = [
     status: 'trial',
     logoText: 'JC',
     primaryContact: 'Joseph Kamanzi',
-    trialCirclesRemaining: 2,
+    trialCirclesRemaining: 1,
     completedBillableCircles: 86,
     creditBalanceUSD: 12.0,
     lowCreditAlert: false,
